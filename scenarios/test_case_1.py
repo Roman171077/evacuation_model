@@ -3,7 +3,7 @@ from typing import Dict, List, Tuple
 from src.model.door import Door
 from src.model.person import Person
 from src.model.segment import Segment
-from src.simulation.simulation import SimulationParams
+from src.model.simulation_params import SimulationParams
 
 
 def build_test_case_1() -> Tuple[Dict[str, Segment], List[Person], SimulationParams]:
