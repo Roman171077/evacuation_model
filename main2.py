@@ -1,16 +1,29 @@
 from __future__ import annotations
 
-import matplotlib
-matplotlib.use("TkAgg")   # важно: до pyplot
-
 from collections import defaultdict
 from dataclasses import dataclass, field
-from math import hypot
+import importlib.util
+from math import hypot, log
 from typing import DefaultDict, Dict, List, Optional, Tuple
 
-import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
-from matplotlib.lines import Line2D
+HAS_MATPLOTLIB = importlib.util.find_spec("matplotlib") is not None
+
+if HAS_MATPLOTLIB:
+    import matplotlib
+    matplotlib.use("TkAgg")   # важно: до pyplot
+    import matplotlib.pyplot as plt
+    from matplotlib.animation import FuncAnimation
+    from matplotlib.lines import Line2D
+else:
+    matplotlib = None
+    plt = None
+
+    class FuncAnimation:  # type: ignore[override]
+        pass
+
+    class Line2D:  # type: ignore[override]
+        def __init__(self, *args, **kwargs) -> None:
+            pass
 
 
 # =========================================================
@@ -18,7 +31,7 @@ from matplotlib.lines import Line2D
 # ПЕРВАЯ УПРОЩЕННАЯ ВЕРСИЯ:
 # - M1 по умолчанию можно не выделять отдельно
 # - для Ф1.3 основной поток обычно M0_7
-# - ai храним, но в текущей упрощенной формуле скорости не используем
+# - табличные V0, ai, D0 используются в нормативной аппроксимации скорости
 # =========================================================
 
 ROW_STEP_X = 0.25  # шаг перестроения рядов по приложению № 7
@@ -382,6 +395,8 @@ def estimate_row_capacity(section: "Segment", people: List["Person"]) -> int:
     if not people:
         return max(1, int(section.width // 0.50))
 
+    # При смешанном составе принимаем консервативное правило:
+    # ряд формируем по самому "широкому" человеку, чтобы не завысить вместимость.
     max_person_width = max(get_profile_geom_width(person.group) for person in people)
     if max_person_width <= 0:
         max_person_width = 0.50
@@ -400,6 +415,7 @@ class Segment:
     width: float
     exit_width: float
     next_section_id: Optional[str] = None
+    merge_lj: float = 0.0
     row_capacity: Optional[int] = None
 
     transfer_credit: float = 0.0
@@ -422,6 +438,7 @@ class Person:
     x_raw: float = 0.0
     finished: bool = False
     exit_time: Optional[float] = None
+    transition_rank: int = 0
 
     initial_section_id: str = field(init=False)
     initial_x: float = field(init=False)
@@ -480,6 +497,13 @@ class SectionVisual:
     end: Tuple[float, float]
 
 
+def require_matplotlib() -> None:
+    if not HAS_MATPLOTLIB:
+        raise ModuleNotFoundError(
+            "matplotlib не установлен; расчетная часть доступна, визуализация недоступна в этой среде."
+        )
+
+
 # =========================================================
 # РАСЧЕТНАЯ ЧАСТЬ
 # =========================================================
@@ -510,65 +534,37 @@ def compute_local_density(group_people: List[Person], section: Segment, winter: 
     return ((n_people - 1) * f_avg) / (section.width * delta_x)
 
 
-def compute_effective_occupied_length(section_people: List[Person]) -> float:
-    if not section_people:
-        return 0.0
+def compute_person_speed(person: Person, section: Segment, local_density: float) -> float:
+    movement_params = get_profile_movement_params(person.group, section.section_type)
+    v0_mpm = float(movement_params["V0"])
+    ai = float(movement_params["ai"])
+    d0 = float(movement_params["D0"])
 
-    xs = sorted(person.x for person in section_people)
-    span = xs[-1] - xs[0]
-    return max(ROW_STEP_X, span + ROW_STEP_X)
+    if local_density <= 0 or local_density <= d0:
+        return max(0.01, v0_mpm / 60.0)
+
+    # Нормативная параметризация через табличные коэффициенты профиля.
+    speed_mpm = v0_mpm * (1.0 - ai * log(local_density / d0))
+    return max(0.01, speed_mpm / 60.0)
 
 
-def compute_section_density(section_people: List[Person], section: Segment, winter: bool) -> float:
+def compute_section_flow_density(
+    section_people: List[Person],
+    section: Segment,
+    params: SimulationParams,
+) -> float:
+    """
+    П7.5: Dvj(t) = (Nj * f * dt) / (aj * bj)
+    """
     if not section_people or section.width <= 0:
         return 0.0
 
-    occupied_length = compute_effective_occupied_length(section_people)
-    if occupied_length <= 0:
-        return 0.0
-
-    total_area = sum(effective_person_area(person, winter) for person in section_people)
-    density = total_area / (occupied_length * section.width)
-    return max(0.0, density)
-
-
-def base_speed_mps(person: Person, section: Segment) -> float:
-    """
-    УПРОЩЕННАЯ первая версия:
-    - берем нормативную скорость свободного движения V0 по профилю и типу участка
-    - переводим из м/мин в м/с
-    """
-    params = get_profile_movement_params(person.group, section.section_type)
-    v0_m_per_min = float(params["V0"])
-    return v0_m_per_min / 60.0
-
-
-def density_reduction_factor(density: float, d0: float) -> float:
-    """
-    УПРОЩЕННАЯ первая версия:
-    - пока используем D0 как границу свободного движения,
-    - ai пока только храним в структуре данных, но не используем в формуле.
-    Позже сюда можно подставить более строгую нормативную зависимость.
-    """
-    if density <= d0:
-        return 1.0
-
-    excess = density - d0
-
-    if excess < 0.3:
-        return max(0.80, 1.0 - 0.40 * excess / 0.3)
-    if excess < 0.7:
-        return max(0.45, 0.80 - 0.35 * (excess - 0.3) / 0.4)
-    if excess < 1.2:
-        return max(0.15, 0.45 - 0.30 * (excess - 0.7) / 0.5)
-    return 0.10
-
-
-def compute_person_speed(person: Person, section: Segment, local_density: float) -> float:
-    base_v = base_speed_mps(person, section)
-    movement_params = get_profile_movement_params(person.group, section.section_type)
-    d0 = float(movement_params["D0"])
-    return max(0.01, base_v * density_reduction_factor(local_density, d0))
+    effective_length = max(section.length, ROW_STEP_X)
+    f_avg = sum(
+        effective_person_area(person, params.winter_clothing)
+        for person in section_people
+    ) / len(section_people)
+    return (len(section_people) * f_avg * params.dt) / (effective_length * section.width)
 
 
 def compute_intensity_q_m_per_min(section_people: List[Person], section: Segment, density: float) -> float:
@@ -594,7 +590,7 @@ def compute_capacity_people_per_step(
     if not section_people:
         return 0
 
-    density = compute_section_density(section_people, section, params.winter_clothing)
+    density = compute_section_flow_density(section_people, section, params)
     intensity = compute_intensity_q_m_per_min(section_people, section, density)
 
     f_avg = sum(
@@ -640,13 +636,20 @@ def place_waiting_people(section: Segment, people: List[Person]) -> None:
     Те, кто не прошел, выстраиваются в очередь на исходном участке.
     Вместимость ряда определяется по геометрии профилей.
     """
-    people.sort(key=lambda person: person.pid)
-
     row_capacity = estimate_row_capacity(section, people)
 
     for idx, person in enumerate(people):
         row_number = idx // row_capacity
         person.x = row_number * ROW_STEP_X + ROW_STEP_X
+
+
+def compute_transition_coordinate(person: Person, target_section: Segment) -> float:
+    """
+    П7.3: x_new = [x_prev - V * dt] + a_j - l_j
+    Здесь x_raw уже равен [x_prev - V * dt] на предыдущем участке.
+    """
+    x_new = person.x_raw + target_section.length - target_section.merge_lj
+    return max(0.0, min(target_section.length, x_new))
 
 
 def reset_model_state(sections: Dict[str, Segment], people: List[Person]) -> None:
@@ -660,6 +663,7 @@ def reset_model_state(sections: Dict[str, Segment], people: List[Person]) -> Non
         person.x_raw = person.x
         person.finished = False
         person.exit_time = None
+        person.transition_rank = 0
 
 
 class EvacuationModel:
@@ -668,6 +672,7 @@ class EvacuationModel:
         self.people = people
         self.params = params
         self.time = 0.0
+        self.transition_counter = 0
 
     def active_people(self) -> List[Person]:
         return [person for person in self.people if not person.finished]
@@ -717,12 +722,16 @@ class EvacuationModel:
             allowed = compute_capacity_people_per_step(section_people, section, self.params)
 
             if self.params.queue_priority_most_negative_first:
-                candidates.sort(key=lambda person: (person.x_raw, person.pid))
+                candidates.sort(key=lambda person: person.x_raw)
             else:
-                candidates.sort(key=lambda person: person.pid)
+                candidates.sort(key=lambda person: person.transition_rank)
 
             to_pass = candidates[:allowed]
             to_wait = candidates[allowed:]
+
+            for person in to_pass:
+                person.transition_rank = self.transition_counter
+                self.transition_counter += 1
 
             # оставшиеся ждут на исходном участке
             place_waiting_people(section, to_wait)
@@ -745,14 +754,13 @@ class EvacuationModel:
             target_section = self.sections[target_sid]
 
             if self.params.queue_priority_most_negative_first:
-                incoming_people.sort(key=lambda person: (person.x_raw, person.pid))
+                incoming_people.sort(key=lambda person: (person.x_raw, person.transition_rank))
             else:
-                incoming_people.sort(key=lambda person: person.pid)
+                incoming_people.sort(key=lambda person: person.transition_rank)
 
-            for idx, person in enumerate(incoming_people):
-                overshoot = abs(person.x_raw)  # сколько человек "перешел" границу исходного участка
+            for person in incoming_people:
                 person.section_id = target_sid
-                person.x = max(0.0, target_section.length - overshoot - idx * 1e-3)
+                person.x = compute_transition_coordinate(person, target_section)
 
     def run(self, verbose: bool = True) -> Dict[str, float | Dict[int, float | None]]:
         while not self.all_finished() and self.time < self.params.max_time:
@@ -1012,6 +1020,7 @@ def build_section_layout_simple() -> Dict[str, SectionVisual]:
 
 
 def setup_axes(ax: plt.Axes, layout: Dict[str, SectionVisual]) -> None:
+    require_matplotlib()
     xs: List[float] = []
     ys: List[float] = []
     for visual in layout.values():
@@ -1026,6 +1035,7 @@ def setup_axes(ax: plt.Axes, layout: Dict[str, SectionVisual]) -> None:
 
 
 def draw_sections(ax: plt.Axes, sections: Dict[str, Segment], layout: Dict[str, SectionVisual]) -> None:
+    require_matplotlib()
     # сначала рисуем сами участки
     for sid, section in sections.items():
         visual = layout[sid]
@@ -1134,6 +1144,7 @@ def perpendicular_unit_vector(visual: SectionVisual) -> Tuple[float, float]:
 
 
 def draw_people(ax: plt.Axes, snapshot: Snapshot, sections: Dict[str, Segment], layout: Dict[str, SectionVisual]) -> None:
+    require_matplotlib()
     people_by_section: DefaultDict[str, List[PersonState]] = defaultdict(list)
 
     for person in snapshot.people:
@@ -1163,6 +1174,7 @@ def draw_people(ax: plt.Axes, snapshot: Snapshot, sections: Dict[str, Segment], 
 
 
 def draw_status_box(ax: plt.Axes, snapshot: Snapshot, sections: Dict[str, Segment]) -> None:
+    require_matplotlib()
     active_count = snapshot.total_people - snapshot.finished_count
 
     lines = [
@@ -1193,6 +1205,7 @@ def draw_status_box(ax: plt.Axes, snapshot: Snapshot, sections: Dict[str, Segmen
 
 
 def draw_group_legend(ax: plt.Axes) -> None:
+    require_matplotlib()
     handles = [
         Line2D(
             [0],
@@ -1216,6 +1229,7 @@ def render_snapshot(
     sections: Dict[str, Segment],
     layout: Dict[str, SectionVisual],
 ) -> None:
+    require_matplotlib()
     ax.clear()
     setup_axes(ax, layout)
     draw_sections(ax, sections, layout)
@@ -1235,6 +1249,7 @@ def plot_snapshot_at_time(
     layout: Dict[str, SectionVisual],
     time_sec: float,
 ) -> None:
+    require_matplotlib()
     snapshot = find_nearest_snapshot(history, time_sec)
     fig, ax = plt.subplots(figsize=(13, 8))
     render_snapshot(ax, snapshot, sections, layout)
@@ -1247,6 +1262,7 @@ def animate_evacuation(
     layout: Dict[str, SectionVisual],
     interval_ms: int = 700,
 ) -> Tuple[plt.Figure, FuncAnimation]:
+    require_matplotlib()
     fig, ax = plt.subplots(figsize=(13, 8))
 
     def update(frame_index: int):
