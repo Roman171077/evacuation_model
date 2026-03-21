@@ -15,43 +15,378 @@ from matplotlib.lines import Line2D
 
 # =========================================================
 # НОРМАТИВНЫЕ / ИСХОДНЫЕ ДАННЫЕ МОДЕЛИ
+# ПЕРВАЯ УПРОЩЕННАЯ ВЕРСИЯ:
+# - M1 по умолчанию можно не выделять отдельно
+# - для Ф1.3 основной поток обычно M0_7
+# - ai храним, но в текущей упрощенной формуле скорости не используем
 # =========================================================
 
-# Площадь горизонтальной проекции человека, м2/чел
-# и базовая скорость (пока упрощенно)
-MOBILITY_GROUPS: Dict[str, Dict[str, float]] = {
-    "M0": {"f": 0.10, "base_speed": 1.30},
-    "BLIND": {"f": 0.40, "base_speed": 0.80},
-    "ODA_NO_SUPPORT": {"f": 0.25, "base_speed": 0.95},
-    "ODA_ONE_SUPPORT": {"f": 0.20, "base_speed": 0.80},
-    "ODA_TWO_SUPPORT": {"f": 0.30, "base_speed": 0.65},
-    "WHEELCHAIR": {"f": 0.96, "base_speed": 0.60},
-    "STRETCHER": {"f": 1.05, "base_speed": 0.50},
-    "GURNEY": {"f": 1.58, "base_speed": 0.45},
+ROW_STEP_X = 0.25  # шаг перестроения рядов по приложению № 7
+
+FLOW_PROFILES: Dict[str, Dict[str, object]] = {
+    # ---------------------------
+    # M0
+    # ---------------------------
+    "M0_1": {
+        "label": "Дети и подростки (7–18 лет)",
+        "mobility_group": "M0",
+        "geometry_source": "assumption_scaled_from_base_m0",
+        "a_geom": 0.22,
+        "c_geom": 0.35,
+        "f": 0.06,
+        "movement": {
+            "horizontal":  {"V0": 92.6,  "ai": 0.284, "D0": 0.75},
+            "door":        {"V0": 92.6,  "ai": 0.350, "D0": 1.20},
+            "stairs_down": {"V0": 92.4,  "ai": 0.338, "D0": 0.94},
+            "stairs_up":   {"V0": 65.9,  "ai": 0.289, "D0": 0.84},
+        },
+    },
+    "M0_2": {
+        "label": "Молодежь (18–25 лет)",
+        "mobility_group": "M0",
+        "geometry_source": "assumption_scaled_from_base_m0",
+        "a_geom": 0.26,
+        "c_geom": 0.43,
+        "f": 0.09,
+        "movement": {
+            "horizontal":  {"V0": 120.0, "ai": 0.308, "D0": 0.72},
+            "door":        {"V0": 120.0, "ai": 0.308, "D0": 0.53},
+            "stairs_down": {"V0": 129.0, "ai": 0.353, "D0": 0.58},
+            "stairs_up":   {"V0": 76.8,  "ai": 0.305, "D0": 0.67},
+        },
+    },
+    "M0_3": {
+        "label": "Люди трудоспособного возраста (18–60 лет)",
+        "mobility_group": "M0",
+        "geometry_source": "normative_P2.5",
+        "a_geom": 0.28,
+        "c_geom": 0.46,
+        "f": 0.10,
+        "movement": {
+            "horizontal":  {"V0": 100.0, "ai": 0.295, "D0": 0.51},
+            "door":        {"V0": 100.0, "ai": 0.295, "D0": 0.65},
+            "stairs_down": {"V0": 100.0, "ai": 0.400, "D0": 0.89},
+            "stairs_up":   {"V0": 60.0,  "ai": 0.305, "D0": 0.67},
+        },
+    },
+    "M0_4": {
+        "label": "Дошкольники + школьники + люди трудоспособного возраста",
+        "mobility_group": "M0",
+        "geometry_source": "assumption_scaled_from_base_m0",
+        "a_geom": 0.26,
+        "c_geom": 0.43,
+        "f": 0.09,
+        "movement": {
+            "horizontal":  {"V0": 93.8,  "ai": 0.353, "D0": 0.56},
+            "door":        {"V0": 93.8,  "ai": 0.371, "D0": 0.64},
+            "stairs_down": {"V0": 93.8,  "ai": 0.394, "D0": 0.75},
+            "stairs_up":   {"V0": 57.5,  "ai": 0.375, "D0": 0.66},
+        },
+    },
+    "M0_5": {
+        "label": "Дошкольники + школьники + трудоспособные + активные пожилые",
+        "mobility_group": "M0",
+        "geometry_source": "assumption_scaled_from_base_m0",
+        "a_geom": 0.31,
+        "c_geom": 0.50,
+        "f": 0.121,
+        "movement": {
+            "horizontal":  {"V0": 91.4,  "ai": 0.357, "D0": 0.58},
+            "door":        {"V0": 91.8,  "ai": 0.366, "D0": 0.62},
+            "stairs_down": {"V0": 90.0,  "ai": 0.410, "D0": 0.83},
+            "stairs_up":   {"V0": 56.1,  "ai": 0.379, "D0": 0.68},
+        },
+    },
+    "M0_6": {
+        "label": "Люди трудоспособного возраста + активные пожилые",
+        "mobility_group": "M0",
+        "geometry_source": "assumption_scaled_from_base_m0",
+        "a_geom": 0.31,
+        "c_geom": 0.52,
+        "f": 0.127,
+        "movement": {
+            "horizontal":  {"V0": 69.6,  "ai": 0.385, "D0": 0.71},
+            "door":        {"V0": 72.1,  "ai": 0.318, "D0": 0.41},
+            "stairs_down": {"V0": 61.7,  "ai": 0.394, "D0": 0.75},
+            "stairs_up":   {"V0": 43.5,  "ai": 0.400, "D0": 0.78},
+        },
+    },
+    "M0_7": {
+        "label": "Люди с грудными детьми + дошкольники + школьники + трудоспособные + активные пожилые",
+        "mobility_group": "M0",
+        "geometry_source": "assumption_scaled_from_base_m0",
+        "a_geom": 0.31,
+        "c_geom": 0.50,
+        "f": 0.121,
+        "movement": {
+            "horizontal":  {"V0": 45.02, "ai": 0.425, "D0": 0.86},
+            "door":        {"V0": 50.0,  "ai": 0.253, "D0": 0.18},
+            "stairs_down": {"V0": 30.0,  "ai": 0.367, "D0": 0.62},
+            "stairs_up":   {"V0": 30.0,  "ai": 0.414, "D0": 0.88},
+        },
+    },
+
+    # ---------------------------
+    # M1 (обычно не выделяем отдельно)
+    # ---------------------------
+    "M1_ELDERLY_60_PLUS": {
+        "label": "Пожилые люди (старше 60 лет)",
+        "mobility_group": "M1",
+        "separate_by_default": False,
+        "geometry_source": "assumption_same_as_base_m0",
+        "a_geom": 0.28,
+        "c_geom": 0.46,
+        "f": 0.10,
+        "movement": {
+            "horizontal":  {"V0": 80.0,  "ai": 0.295, "D0": 0.51},
+            "door":        {"V0": 80.0,  "ai": 0.295, "D0": 0.65},
+            "stairs_down": {"V0": 70.0,  "ai": 0.400, "D0": 0.89},
+            "stairs_up":   {"V0": 60.0,  "ai": 0.305, "D0": 0.67},
+        },
+    },
+    "M1_PRESCHOOL": {
+        "label": "Дошкольники (дети 3–7 лет)",
+        "mobility_group": "M1",
+        "separate_by_default": False,
+        "geometry_source": "assumption_scaled_from_base_m0",
+        "a_geom": 0.15,
+        "c_geom": 0.25,
+        "f": 0.03,
+        "movement": {
+            "horizontal":  {"V0": 60.0,  "ai": 0.275, "D0": 0.78},
+            "door":        {"V0": 60.0,  "ai": 0.350, "D0": 1.20},
+            "stairs_down": {"V0": 47.0,  "ai": 0.190, "D0": 0.64},
+            "stairs_up":   {"V0": 47.0,  "ai": 0.275, "D0": 0.76},
+        },
+    },
+    "M1_DEAF": {
+        "label": "Глухие и слабослышащие люди",
+        "mobility_group": "M1",
+        "separate_by_default": False,
+        "geometry_source": "assumption_scaled_from_base_m0",
+        "a_geom": 0.31,
+        "c_geom": 0.51,
+        "f": 0.125,
+        "movement": {
+            "horizontal":  {"V0": 82.0,  "ai": 0.301, "D0": 0.58},
+            "door":        {"V0": 82.0,  "ai": 0.328, "D0": 0.73},
+            "stairs_down": {"V0": 82.0,  "ai": 0.380, "D0": 0.91},
+            "stairs_up":   {"V0": 54.0,  "ai": 0.344, "D0": 0.72},
+        },
+    },
+    "M1_PREGNANT": {
+        "label": "Беременные женщины",
+        "mobility_group": "M1",
+        "separate_by_default": False,
+        "geometry_source": "assumption_scaled_from_base_m0",
+        "a_geom": 0.34,
+        "c_geom": 0.56,
+        "f": 0.15,
+        "movement": {
+            "horizontal":  {"V0": 56.42, "ai": 0.404, "D0": 0.991},
+            "door":        {"V0": 49.47, "ai": 0.427, "D0": 1.033},
+            "stairs_down": {"V0": 42.35, "ai": 0.336, "D0": 0.786},
+            "stairs_up":   {"V0": 31.25, "ai": 0.411, "D0": 1.312},
+        },
+    },
+
+    # ---------------------------
+    # M2
+    # ---------------------------
+    "M2_FRAIL_ELDERLY": {
+        "label": "Пожилые немощные люди",
+        "mobility_group": "M2",
+        "geometry_source": "assumption_proxy_from_P2.5_one_support",
+        "a_geom": 0.50,
+        "c_geom": 0.65,
+        "f": 0.20,
+        "movement": {
+            "horizontal":  {"V0": 25.0, "ai": 0.428, "D0": 0.96},
+            "door":        {"V0": 20.0, "ai": 0.456, "D0": 1.02},
+            "stairs_down": {"V0": 20.0, "ai": 0.505, "D0": 1.26},
+            "stairs_up":   {"V0": 20.0, "ai": 0.338, "D0": 0.56},
+            "ramp_down":   {"V0": 25.0, "ai": 0.353, "D0": 0.58},
+            "ramp_up":     {"V0": 15.0, "ai": 0.368, "D0": 0.72},
+        },
+    },
+    "M2_BLIND": {
+        "label": "Слепые и слабовидящие люди",
+        "mobility_group": "M2",
+        "geometry_source": "normative_P2.5",
+        "a_geom": 0.72,
+        "c_geom": 0.82,
+        "f": 0.40,
+        "movement": {
+            "horizontal":  {"V0": 26.0, "ai": 0.371, "D0": 0.73},
+            "door":        {"V0": 17.0, "ai": 0.271, "D0": 0.77},
+            "stairs_down": {"V0": 21.0, "ai": 0.519, "D0": 0.97},
+            "stairs_up":   {"V0": 18.0, "ai": 0.387, "D0": 0.82},
+        },
+    },
+
+    # ---------------------------
+    # M3
+    # ---------------------------
+    "M3_ODA": {
+        "label": "Люди трудоспособного возраста с поражением ОДА",
+        "mobility_group": "M3",
+        "geometry_source": "agreed_simplification_two_supports",
+        "a_geom": 0.50,
+        "c_geom": 0.90,
+        "f": 0.30,
+        "movement": {
+            "horizontal":  {"V0": 44.0, "ai": 0.414, "D0": 0.77},
+            "door":        {"V0": 38.0, "ai": 0.345, "D0": 0.57},
+            "stairs_down": {"V0": 24.0, "ai": 0.422, "D0": 0.96},
+            "stairs_up":   {"V0": 14.0, "ai": 0.313, "D0": 0.74},
+        },
+    },
+
+    # ---------------------------
+    # M4
+    # ---------------------------
+    "M4_WHEELCHAIR": {
+        "label": "Инвалиды на креслах-колясках",
+        "mobility_group": "M4",
+        "geometry_source": "normative_P2.5",
+        "a_geom": 0.80,
+        "c_geom": 1.20,
+        "f": 0.96,
+        "movement": {
+            "horizontal": {"V0": 60.0, "ai": 0.400, "D0": 0.141},
+            "ramp_down":  {"V0": 60.0, "ai": 0.400, "D0": 0.141},
+            "ramp_up":    {"V0": 40.0, "ai": 0.420, "D0": 0.156},
+        },
+    },
+
+    # ---------------------------
+    # special
+    # ---------------------------
+    "DISABLED_CHILD": {
+        "label": "Дети с ограниченными возможностями",
+        "mobility_group": "special",
+        "geometry_source": "assumption_scaled_from_base_m0",
+        "a_geom": 0.34,
+        "c_geom": 0.56,
+        "f": 0.15,
+        "movement": {
+            "horizontal":  {"V0": 51.0, "ai": 0.290, "D0": 0.60},
+            "door":        {"V0": 47.0, "ai": 0.300, "D0": 0.67},
+            "stairs_down": {"V0": 23.0, "ai": 0.210, "D0": 0.63},
+            "stairs_up":   {"V0": 20.0, "ai": 0.300, "D0": 0.69},
+        },
+    },
+
+    # ---------------------------
+    # NM / NT / NO
+    # В эту первую версию обычного самоходного расчета не включаем
+    # ---------------------------
+    "NM_STRETCHER": {
+        "label": "Немобильные, транспортируемые на носилках",
+        "mobility_group": "NM",
+        "geometry_source": "normative_P2.5",
+        "a_geom": 0.50,  # в таблице это b1
+        "c_geom": 2.10,  # в таблице это l1
+        "f": 1.05,
+        "movement_model": "transport_by_staff",
+    },
+    "NM_GURNEY": {
+        "label": "Немобильные, транспортируемые на каталках",
+        "mobility_group": "NM",
+        "geometry_source": "normative_P2.5",
+        "a_geom": 0.75,  # в таблице это b2
+        "c_geom": 2.10,  # в таблице это l2
+        "f": 1.58,
+        "movement_model": "transport_by_staff",
+    },
 }
 
-SECTION_TYPE_SPEED_FACTOR: Dict[str, float] = {
-    "horizontal": 1.00,
-    "door": 0.95,
-    "stairs_down": 0.80,
-    "stairs_up": 0.60,
-    "ramp": 0.75,
-    "exit": 1.00,
-}
-
-ROW_STEP_X = 0.25
-
-GROUP_COLORS: Dict[str, str] = {
+MOBILITY_GROUP_COLORS: Dict[str, str] = {
     "M0": "#1f77b4",
-    "BLIND": "#9467bd",
-    "ODA_NO_SUPPORT": "#2ca02c",
-    "ODA_ONE_SUPPORT": "#ff7f0e",
-    "ODA_TWO_SUPPORT": "#8c564b",
-    "WHEELCHAIR": "#d62728",
-    "STRETCHER": "#17becf",
-    "GURNEY": "#e377c2",
+    "M1": "#9467bd",
+    "M2": "#8c564b",
+    "M3": "#ff7f0e",
+    "M4": "#d62728",
+    "special": "#2ca02c",
+    "NM": "#17becf",
 }
 
+SECTION_FALLBACK_MAP: Dict[str, str] = {
+    "horizontal": "horizontal",
+    "door": "door",
+    "stairs_down": "stairs_down",
+    "stairs_up": "stairs_up",
+    "ramp": "horizontal",   # упрощение первой версии
+    "exit": "horizontal",
+}
+
+
+def get_profile(profile_name: str) -> Dict[str, object]:
+    if profile_name not in FLOW_PROFILES:
+        raise KeyError(f"Неизвестный профиль потока: {profile_name}")
+    return FLOW_PROFILES[profile_name]
+
+
+def get_profile_label(profile_name: str) -> str:
+    return str(get_profile(profile_name).get("label", profile_name))
+
+
+def get_profile_mobility_group(profile_name: str) -> str:
+    return str(get_profile(profile_name).get("mobility_group", "M0"))
+
+
+def get_profile_area(profile_name: str) -> float:
+    value = get_profile(profile_name).get("f")
+    if value is None:
+        raise ValueError(f"Для профиля {profile_name} не задано f")
+    return float(value)
+
+
+def get_profile_geom_width(profile_name: str) -> float:
+    # Для построения рядов используем поперечный размер эллипса
+    value = get_profile(profile_name).get("a_geom")
+    if value is None:
+        return 0.50
+    return float(value)
+
+
+def get_profile_movement_params(profile_name: str, section_type: str) -> Dict[str, float]:
+    profile = get_profile(profile_name)
+    movement = profile.get("movement")
+
+    if not isinstance(movement, dict):
+        raise ValueError(f"Профиль {profile_name} не является самоходным")
+
+    if section_type in movement:
+        return movement[section_type]  # type: ignore[return-value]
+
+    fallback_key = SECTION_FALLBACK_MAP.get(section_type, "horizontal")
+    if fallback_key in movement:
+        return movement[fallback_key]  # type: ignore[return-value]
+
+    if "horizontal" in movement:
+        return movement["horizontal"]  # type: ignore[return-value]
+
+    raise KeyError(f"Для профиля {profile_name} нет параметров движения для участка {section_type}")
+
+
+def get_profile_color(profile_name: str) -> str:
+    mobility_group = get_profile_mobility_group(profile_name)
+    return MOBILITY_GROUP_COLORS.get(mobility_group, "#1f77b4")
+
+
+def estimate_row_capacity(section: "Segment", people: List["Person"]) -> int:
+    if section.row_capacity is not None:
+        return max(1, section.row_capacity)
+
+    if not people:
+        return max(1, int(section.width // 0.50))
+
+    max_person_width = max(get_profile_geom_width(person.group) for person in people)
+    if max_person_width <= 0:
+        max_person_width = 0.50
+
+    return max(1, int(section.width // max_person_width))
 
 # =========================================================
 # СТРУКТУРЫ ДАННЫХ
@@ -67,25 +402,19 @@ class Segment:
     next_section_id: Optional[str] = None
     row_capacity: Optional[int] = None
 
-    # накопление дробной пропускной способности между шагами
     transfer_credit: float = 0.0
-
-    def __post_init__(self) -> None:
-        if self.row_capacity is None:
-            self.row_capacity = max(1, int(self.width // 0.5))
 
 
 @dataclass
 class Door(Segment):
     def __post_init__(self) -> None:
-        super().__post_init__()
         self.section_type = "door"
 
 
 @dataclass
 class Person:
     pid: int
-    group: str
+    group: str          # здесь group = ключ FLOW_PROFILES, например M0_7, M3_ODA, M4_WHEELCHAIR
     section_id: str
     x: float
 
@@ -103,7 +432,19 @@ class Person:
 
     @property
     def f(self) -> float:
-        return MOBILITY_GROUPS[self.group]["f"]
+        return get_profile_area(self.group)
+
+    @property
+    def mobility_group(self) -> str:
+        return get_profile_mobility_group(self.group)
+
+    @property
+    def a_geom(self) -> float:
+        return get_profile_geom_width(self.group)
+
+    @property
+    def label(self) -> str:
+        return get_profile_label(self.group)
 
 
 @dataclass
@@ -145,7 +486,8 @@ class SectionVisual:
 
 def effective_person_area(person: Person, winter: bool) -> float:
     area = person.f
-    if winter and person.group == "M0":
+    # В первой версии увеличиваем площадь зимой только для M0
+    if winter and person.mobility_group == "M0":
         area *= 1.25
     return area
 
@@ -169,9 +511,6 @@ def compute_local_density(group_people: List[Person], section: Segment, winter: 
 
 
 def compute_effective_occupied_length(section_people: List[Person]) -> float:
-    """
-    Эффективная занятая длина потока на участке.
-    """
     if not section_people:
         return 0.0
 
@@ -181,9 +520,6 @@ def compute_effective_occupied_length(section_people: List[Person]) -> float:
 
 
 def compute_section_density(section_people: List[Person], section: Segment, winter: bool) -> float:
-    """
-    Средняя плотность по реально занятой части участка.
-    """
     if not section_people or section.width <= 0:
         return 0.0
 
@@ -197,31 +533,42 @@ def compute_section_density(section_people: List[Person], section: Segment, wint
 
 
 def base_speed_mps(person: Person, section: Segment) -> float:
-    base_speed = MOBILITY_GROUPS[person.group]["base_speed"]
-    speed_factor = SECTION_TYPE_SPEED_FACTOR.get(section.section_type, 1.0)
-    return base_speed * speed_factor
+    """
+    УПРОЩЕННАЯ первая версия:
+    - берем нормативную скорость свободного движения V0 по профилю и типу участка
+    - переводим из м/мин в м/с
+    """
+    params = get_profile_movement_params(person.group, section.section_type)
+    v0_m_per_min = float(params["V0"])
+    return v0_m_per_min / 60.0
 
 
-def density_reduction_factor(density: float) -> float:
+def density_reduction_factor(density: float, d0: float) -> float:
     """
-    Пока упрощенная кривая снижения скорости.
-    Позже заменим на нормативные таблицы приложения.
+    УПРОЩЕННАЯ первая версия:
+    - пока используем D0 как границу свободного движения,
+    - ai пока только храним в структуре данных, но не используем в формуле.
+    Позже сюда можно подставить более строгую нормативную зависимость.
     """
-    if density <= 0:
+    if density <= d0:
         return 1.0
-    if density < 0.3:
-        return 1.0
-    if density < 0.6:
-        return max(0.80, 1.0 - 0.40 * (density - 0.3) / 0.3)
-    if density < 1.0:
-        return max(0.45, 0.80 - 0.35 * (density - 0.6) / 0.4)
-    if density < 1.5:
-        return max(0.15, 0.45 - 0.30 * (density - 1.0) / 0.5)
+
+    excess = density - d0
+
+    if excess < 0.3:
+        return max(0.80, 1.0 - 0.40 * excess / 0.3)
+    if excess < 0.7:
+        return max(0.45, 0.80 - 0.35 * (excess - 0.3) / 0.4)
+    if excess < 1.2:
+        return max(0.15, 0.45 - 0.30 * (excess - 0.7) / 0.5)
     return 0.10
 
 
 def compute_person_speed(person: Person, section: Segment, local_density: float) -> float:
-    return max(0.01, base_speed_mps(person, section) * density_reduction_factor(local_density))
+    base_v = base_speed_mps(person, section)
+    movement_params = get_profile_movement_params(person.group, section.section_type)
+    d0 = float(movement_params["D0"])
+    return max(0.01, base_v * density_reduction_factor(local_density, d0))
 
 
 def compute_intensity_q_m_per_min(section_people: List[Person], section: Segment, density: float) -> float:
@@ -268,9 +615,6 @@ def compute_capacity_people_per_step(
 
 
 def build_local_groups(sorted_people: List[Person]) -> List[List[Person]]:
-    """
-    Формируем локальные группы: соседние люди, если расстояние между ними < 0.25 м.
-    """
     if not sorted_people:
         return []
 
@@ -294,11 +638,14 @@ def build_local_groups(sorted_people: List[Person]) -> List[List[Person]]:
 def place_waiting_people(section: Segment, people: List[Person]) -> None:
     """
     Те, кто не прошел, выстраиваются в очередь на исходном участке.
+    Вместимость ряда определяется по геометрии профилей.
     """
     people.sort(key=lambda person: person.pid)
 
+    row_capacity = estimate_row_capacity(section, people)
+
     for idx, person in enumerate(people):
-        row_number = idx // max(1, section.row_capacity)
+        row_number = idx // row_capacity
         person.x = row_number * ROW_STEP_X + ROW_STEP_X
 
 
@@ -544,7 +891,6 @@ def build_test_case_simple() -> tuple[dict[str, Segment], list[Person], Simulati
             width=2.0,
             exit_width=1.2,
             next_section_id="horizontal_3",
-            row_capacity=4,
         ),
         "horizontal_2": Segment(
             sid="horizontal_2",
@@ -553,7 +899,6 @@ def build_test_case_simple() -> tuple[dict[str, Segment], list[Person], Simulati
             width=1.8,
             exit_width=1.0,
             next_section_id="horizontal_3",
-            row_capacity=3,
         ),
         "horizontal_3": Segment(
             sid="horizontal_3",
@@ -562,7 +907,6 @@ def build_test_case_simple() -> tuple[dict[str, Segment], list[Person], Simulati
             width=2.0,
             exit_width=1.2,
             next_section_id="door_1",
-            row_capacity=4,
         ),
         "door_1": Door(
             sid="door_1",
@@ -571,7 +915,6 @@ def build_test_case_simple() -> tuple[dict[str, Segment], list[Person], Simulati
             width=1.2,
             exit_width=1.2,
             next_section_id="stairs_down_1",
-            row_capacity=2,
         ),
         "stairs_down_1": Segment(
             sid="stairs_down_1",
@@ -580,7 +923,6 @@ def build_test_case_simple() -> tuple[dict[str, Segment], list[Person], Simulati
             width=1.35,
             exit_width=1.35,
             next_section_id="stairs_down_2",
-            row_capacity=2,
         ),
         "horizontal_4": Segment(
             sid="horizontal_4",
@@ -589,7 +931,6 @@ def build_test_case_simple() -> tuple[dict[str, Segment], list[Person], Simulati
             width=1.8,
             exit_width=1.0,
             next_section_id="door_2",
-            row_capacity=3,
         ),
         "door_2": Door(
             sid="door_2",
@@ -598,7 +939,6 @@ def build_test_case_simple() -> tuple[dict[str, Segment], list[Person], Simulati
             width=1.0,
             exit_width=1.0,
             next_section_id="stairs_down_2",
-            row_capacity=2,
         ),
         "stairs_down_2": Segment(
             sid="stairs_down_2",
@@ -607,7 +947,6 @@ def build_test_case_simple() -> tuple[dict[str, Segment], list[Person], Simulati
             width=1.35,
             exit_width=1.2,
             next_section_id="door_3",
-            row_capacity=2,
         ),
         "door_3": Door(
             sid="door_3",
@@ -616,21 +955,20 @@ def build_test_case_simple() -> tuple[dict[str, Segment], list[Person], Simulati
             width=1.2,
             exit_width=1.2,
             next_section_id=None,
-            row_capacity=2,
         ),
     }
 
     people: list[Person] = [
-        Person(pid=1, group="M0", section_id="horizontal_1", x=11.0),
-        Person(pid=2, group="M0", section_id="horizontal_1", x=10.6),
-        Person(pid=3, group="M0", section_id="horizontal_1", x=10.2),
+        Person(pid=1, group="M0_7", section_id="horizontal_1", x=11.0),
+        Person(pid=2, group="M0_7", section_id="horizontal_1", x=10.6),
+        Person(pid=3, group="M0_7", section_id="horizontal_1", x=10.2),
 
-        Person(pid=4, group="M0", section_id="horizontal_2", x=9.0),
-        Person(pid=5, group="M0", section_id="horizontal_2", x=8.6),
-        Person(pid=6, group="ODA_ONE_SUPPORT", section_id="horizontal_2", x=8.0),
+        Person(pid=4, group="M0_7", section_id="horizontal_2", x=9.0),
+        Person(pid=5, group="M0_7", section_id="horizontal_2", x=8.6),
+        Person(pid=6, group="M3_ODA", section_id="horizontal_2", x=8.0),
 
-        Person(pid=7, group="M0", section_id="horizontal_4", x=6.5),
-        Person(pid=8, group="WHEELCHAIR", section_id="horizontal_4", x=5.8),
+        Person(pid=7, group="M0_7", section_id="horizontal_4", x=6.5),
+        Person(pid=8, group="M4_WHEELCHAIR", section_id="horizontal_4", x=5.8),
     ]
 
     params = SimulationParams(
@@ -819,7 +1157,7 @@ def draw_people(ax: plt.Axes, snapshot: Snapshot, sections: Dict[str, Segment], 
             px += nx * offset
             py += ny * offset
 
-            color = GROUP_COLORS.get(person.group, "#1f77b4")
+            color = get_profile_color(person.group)
             ax.scatter([px], [py], s=80, color=color, edgecolors="black", linewidths=0.6, zorder=10)
             ax.text(px, py + 0.18, str(person.pid), ha="center", va="bottom", fontsize=8, color="#111111", zorder=11)
 
@@ -864,9 +1202,10 @@ def draw_group_legend(ax: plt.Axes) -> None:
             markerfacecolor=color,
             markeredgecolor="black",
             markersize=8,
-            label=group,
+            label=mobility_group,
         )
-        for group, color in GROUP_COLORS.items()
+        for mobility_group, color in MOBILITY_GROUP_COLORS.items()
+        if mobility_group in {"M0", "M1", "M2", "M3", "M4", "special", "NM"}
     ]
     ax.legend(handles=handles, loc="lower left", framealpha=0.92, fontsize=8)
 
@@ -955,7 +1294,8 @@ if __name__ == "__main__":
     print("\nВремя выхода по людям:")
     for person in sorted(people, key=lambda item: item.pid):
         print(
-            f"Чел {person.pid:>2} | группа={person.group:<16} "
+            f"Чел {person.pid:>2} | профиль={person.group:<16} "
+            f"| моб.гр={person.mobility_group:<4} "
             f"| участок={person.section_id:<15} | вышел={person.finished} | t_exit={person.exit_time}"
         )
 
