@@ -554,7 +554,7 @@ def compute_section_flow_density(
     params: SimulationParams,
 ) -> float:
     """
-    П7.5: Dvj(t) = (Nj * f * dt) / (aj * bj)
+    Плотность потока на участке без повторного умножения на шаг интегрирования.
     """
     if not section_people or section.width <= 0:
         return 0.0
@@ -564,7 +564,7 @@ def compute_section_flow_density(
         effective_person_area(person, params.winter_clothing)
         for person in section_people
     ) / len(section_people)
-    return (len(section_people) * f_avg * params.dt) / (effective_length * section.width)
+    return (len(section_people) * f_avg) / (effective_length * section.width)
 
 
 def compute_intensity_q_m_per_min(section_people: List[Person], section: Segment, density: float) -> float:
