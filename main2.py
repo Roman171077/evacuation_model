@@ -2,16 +2,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import importlib.util
-from math import hypot
+from math import atan2, degrees, hypot
 from typing import Dict, List, Optional, Tuple
 
 HAS_MATPLOTLIB = importlib.util.find_spec("matplotlib") is not None
 
 if HAS_MATPLOTLIB:
     import matplotlib
-    matplotlib.use("TkAgg")   # важно: до pyplot
+    matplotlib.use("Agg")   # headless-friendly backend
     import matplotlib.pyplot as plt
     from matplotlib.animation import FuncAnimation
+    from matplotlib.patches import Ellipse
     from matplotlib.lines import Line2D
 else:
     matplotlib = None
@@ -19,6 +20,10 @@ else:
 
     class FuncAnimation:  # type: ignore[override]
         pass
+
+    class Ellipse:  # type: ignore[override]
+        def __init__(self, *args, **kwargs) -> None:
+            pass
 
     class Line2D:  # type: ignore[override]
         def __init__(self, *args, **kwargs) -> None:
@@ -409,6 +414,10 @@ class Person:
     x_raw: float = 0.0
     finished: bool = False
     exit_time: Optional[float] = None
+    row_index: int = -1
+    place_in_row: int = -1
+    is_row_candidate: bool = False
+    can_fit_in_row: bool = False
 
     initial_section_id: str = field(init=False)
     initial_x: float = field(init=False)
@@ -428,6 +437,13 @@ class Person:
     @property
     def a_geom(self) -> float:
         return get_profile_geom_width(self.group)
+
+    @property
+    def c_geom(self) -> float:
+        value = get_profile(self.group).get("c_geom")
+        if value is None:
+            return 0.50
+        return float(value)
 
     @property
     def label(self) -> str:
@@ -465,6 +481,28 @@ class SectionVisual:
     end: Tuple[float, float]
 
 
+@dataclass
+class Row:
+    row_index: int
+    row_left: float
+    row_right: float
+    used_width: float = 0.0
+    people: List[Person] = field(default_factory=list)
+
+
+@dataclass
+class PersonVisualPlacement:
+    pid: int
+    section_id: str
+    center: Tuple[float, float]
+    length_m: float
+    width_m: float
+    color: str
+    label: str
+    row_index: int
+    place_in_row: int
+
+
 def require_matplotlib() -> None:
     if not HAS_MATPLOTLIB:
         raise ModuleNotFoundError(
@@ -485,6 +523,92 @@ def reset_model_state(people: List[Person]) -> None:
         person.x_raw = person.x
         person.finished = False
         person.exit_time = None
+        person.row_index = -1
+        person.place_in_row = -1
+        person.is_row_candidate = False
+        person.can_fit_in_row = False
+
+
+def get_person_interval_x(person: Person) -> Tuple[float, float]:
+    person_left = person.x - person.c_geom / 2.0
+    person_right = person.x + person.c_geom / 2.0
+    return person_left, person_right
+
+
+def is_candidate_for_row(row: Row, person: Person) -> bool:
+    person_left, person_right = get_person_interval_x(person)
+    return (person_left < row.row_right) and (person_right > row.row_left)
+
+
+def can_fit_into_row(row: Row, person: Person, section: Segment) -> bool:
+    return row.used_width + person.a_geom <= section.width + 1e-9
+
+
+def add_person_to_row(row: Row, person: Person) -> None:
+    person_left, person_right = get_person_interval_x(person)
+    person.row_index = row.row_index
+    person.place_in_row = len(row.people)
+
+    row.people.append(person)
+    row.used_width += person.a_geom
+    row.row_left = min(row.row_left, person_left)
+    row.row_right = max(row.row_right, person_right)
+
+
+def create_new_row(row_index: int, person: Person) -> Row:
+    person_left, person_right = get_person_interval_x(person)
+    row = Row(
+        row_index=row_index,
+        row_left=person_left,
+        row_right=person_right,
+        used_width=0.0,
+        people=[],
+    )
+    add_person_to_row(row, person)
+    return row
+
+
+def build_rows_on_section(people: List[Person], section: Segment) -> List[Row]:
+    if not people:
+        return []
+
+    people_sorted = sorted(people, key=lambda p: p.x)
+    rows: List[Row] = []
+
+    for person in people_sorted:
+        person.is_row_candidate = False
+        person.can_fit_in_row = False
+
+        if not rows:
+            rows.append(create_new_row(0, person))
+            continue
+
+        current_row = rows[-1]
+        candidate = is_candidate_for_row(current_row, person)
+        width_ok = can_fit_into_row(current_row, person, section)
+
+        person.is_row_candidate = candidate
+        person.can_fit_in_row = width_ok
+
+        if candidate and width_ok:
+            add_person_to_row(current_row, person)
+        else:
+            rows.append(create_new_row(len(rows), person))
+
+    return rows
+
+
+def compute_person_row_centers(row: Row, section: Segment) -> Dict[int, float]:
+    del section
+    centers: Dict[int, float] = {}
+    current_offset = -row.used_width / 2.0
+
+    for person in row.people:
+        center_offset = current_offset + person.a_geom / 2.0
+        centers[person.pid] = center_offset
+        current_offset += person.a_geom
+
+    return centers
 
 
 def compute_person_speed_stage1(person: Person, section: Segment) -> float:
@@ -697,6 +821,29 @@ def build_test_case_simple() -> tuple[dict[str, Segment], list[Person], Simulati
     return sections, people, params
 
 
+def build_rows_demo_case() -> tuple[dict[str, Segment], list[Person], SimulationParams]:
+    sections: dict[str, Segment] = {
+        "horizontal_1": Segment(
+            sid="horizontal_1",
+            section_type="horizontal",
+            length=12.0,
+            width=2.0,
+            exit_width=1.2,
+            next_section_id=None,
+        ),
+    }
+
+    people: list[Person] = [
+        Person(pid=1, group="M4_WHEELCHAIR", section_id="horizontal_1", x=5.00),
+        Person(pid=2, group="M0_3", section_id="horizontal_1", x=5.10),
+        Person(pid=3, group="M0_3", section_id="horizontal_1", x=5.15),
+        Person(pid=4, group="M0_3", section_id="horizontal_1", x=5.90),
+    ]
+
+    params = SimulationParams(dt=0.1, max_time=60.0)
+    return sections, people, params
+
+
 # =========================================================
 # СХЕМАТИЧНАЯ ВИЗУАЛИЗАЦИЯ
 # =========================================================
@@ -813,20 +960,90 @@ def perpendicular_unit_vector(visual: SectionVisual) -> Tuple[float, float]:
     return -dy / length, dx / length
 
 
-def draw_people(ax: plt.Axes, snapshot: Snapshot, sections: Dict[str, Segment], layout: Dict[str, SectionVisual]) -> None:
-    require_matplotlib()
+def compute_snapshot_visual_placements(
+    snapshot: Snapshot,
+    sections: Dict[str, Segment],
+    layout: Dict[str, SectionVisual],
+) -> List[PersonVisualPlacement]:
+    placements: List[PersonVisualPlacement] = []
+    section_people: Dict[str, List[Person]] = {sid: [] for sid in sections.keys()}
 
-    for person in snapshot.people:
-        if person.finished or person.section_id == "EXIT":
+    for person_state in snapshot.people:
+        if person_state.finished or person_state.section_id == "EXIT":
             continue
 
-        section = sections[person.section_id]
-        visual = layout[person.section_id]
-        px, py = interpolate_position_on_section(section, visual, person.x)
+        person = Person(
+            pid=person_state.pid,
+            group=person_state.group,
+            section_id=person_state.section_id,
+            x=person_state.x,
+        )
+        section_people[person.section_id].append(person)
 
-        color = get_profile_color(person.group)
-        ax.scatter([px], [py], s=90, color=color, edgecolors="black", linewidths=0.6, zorder=10)
-        ax.text(px, py + 0.22, str(person.pid), ha="center", va="bottom", fontsize=8, color="#111111", zorder=11)
+    for sid, people in section_people.items():
+        if not people:
+            continue
+
+        section = sections[sid]
+        visual = layout[sid]
+        nx, ny = perpendicular_unit_vector(visual)
+        rows = build_rows_on_section(people, section)
+
+        for row in rows:
+            centers = compute_person_row_centers(row, section)
+            for person in row.people:
+                px, py = interpolate_position_on_section(section, visual, person.x)
+                lateral_offset = centers[person.pid]
+                center = (px + nx * lateral_offset, py + ny * lateral_offset)
+                placements.append(
+                    PersonVisualPlacement(
+                        pid=person.pid,
+                        section_id=sid,
+                        center=center,
+                        length_m=person.c_geom,
+                        width_m=person.a_geom,
+                        color=get_profile_color(person.group),
+                        label=f"{person.pid}\nR{person.row_index}:{person.place_in_row}",
+                        row_index=person.row_index,
+                        place_in_row=person.place_in_row,
+                    )
+                )
+
+    return placements
+
+
+def draw_people(ax: plt.Axes, snapshot: Snapshot, sections: Dict[str, Segment], layout: Dict[str, SectionVisual]) -> None:
+    require_matplotlib()
+    placements = compute_snapshot_visual_placements(snapshot, sections, layout)
+
+    for placement in placements:
+        section_visual = layout[placement.section_id]
+        dx = section_visual.end[0] - section_visual.start[0]
+        dy = section_visual.end[1] - section_visual.start[1]
+        angle_deg = 0.0 if abs(dx) + abs(dy) <= 1e-9 else degrees(atan2(dy, dx))
+
+        ellipse = Ellipse(
+            xy=placement.center,
+            width=placement.length_m,
+            height=placement.width_m,
+            angle=angle_deg,
+            facecolor=placement.color,
+            edgecolor="black",
+            linewidth=0.8,
+            alpha=0.85,
+            zorder=10,
+        )
+        ax.add_patch(ellipse)
+        ax.text(
+            placement.center[0],
+            placement.center[1],
+            placement.label,
+            ha="center",
+            va="center",
+            fontsize=7,
+            color="#111111",
+            zorder=11,
+        )
 
 
 def draw_status_box(ax: plt.Axes, snapshot: Snapshot, sections: Dict[str, Segment]) -> None:
@@ -878,6 +1095,29 @@ def draw_group_legend(ax: plt.Axes) -> None:
     ax.legend(handles=handles, loc="lower left", framealpha=0.92, fontsize=8)
 
 
+def format_rows_debug(people: List[Person], section: Segment) -> List[str]:
+    rows = build_rows_on_section(people, section)
+    lines: List[str] = []
+
+    for row in rows:
+        row_people = ", ".join(
+            f"pid={person.pid}:{person.group}:place={person.place_in_row}"
+            for person in row.people
+        )
+        lines.append(
+            " | ".join(
+                [
+                    f"row={row.row_index}",
+                    f"used_width={row.used_width:.2f}",
+                    f"x_interval=[{row.row_left:.2f}, {row.row_right:.2f}]",
+                    row_people,
+                ]
+            )
+        )
+
+    return lines
+
+
 def render_snapshot(
     ax: plt.Axes,
     snapshot: Snapshot,
@@ -891,7 +1131,7 @@ def render_snapshot(
     draw_people(ax, snapshot, sections, layout)
     draw_status_box(ax, snapshot, sections)
     draw_group_legend(ax)
-    ax.set_title("Этап 1. Движение одного человека по одному участку", fontsize=12)
+    ax.set_title("Геометрическое формирование рядов на участке", fontsize=12)
 
 
 def find_nearest_snapshot(history: List[Snapshot], time_sec: float) -> Snapshot:
@@ -908,7 +1148,11 @@ def plot_snapshot_at_time(
     snapshot = find_nearest_snapshot(history, time_sec)
     fig, ax = plt.subplots(figsize=(13, 6))
     render_snapshot(ax, snapshot, sections, layout)
-    plt.show()
+    output_path = "artifacts/rows_demo.png"
+    import os
+    os.makedirs("artifacts", exist_ok=True)
+    fig.savefig(output_path, dpi=160, bbox_inches="tight")
+    print(f"Схема сохранена: {output_path}")
 
 
 def animate_evacuation(
@@ -941,35 +1185,45 @@ def animate_evacuation(
 # =========================================================
 
 if __name__ == "__main__":
-    sections, people, params = build_test_case_simple()
+    sections, people, params = build_rows_demo_case()
 
-    result, history = run_simulation_with_history(
-        (sections, people, params),
-        snapshot_interval=0.5,
-        verbose=True,
-    )
-
-    person = people[0]
     section = next(iter(sections.values()))
 
-    print("\nРЕЗУЛЬТАТ ЭТАПА 1:")
+    print("\nРЕЗУЛЬТАТ ГЕОМЕТРИЧЕСКОГО ФОРМИРОВАНИЯ ПОТОКА:")
     print(f"Участок: {section.sid}")
     print(f"Тип участка: {section.section_type}")
-    print(f"Профиль человека: {person.group} ({person.label})")
-    print(f"Длина участка: {result['segment_length_m']:.2f} м")
-    print(f"Скорость движения: {result['speed_m_per_s']:.4f} м/с")
-    print(f"Время прохождения участка: {result['travel_time_sec']:.2f} с")
+    print(f"Длина участка: {section.length:.2f} м")
+    print(f"Ширина участка для рядов: {section.width:.2f} м")
+    print("Состав примера: впереди M4_WHEELCHAIR, сзади три M0_3")
+    for line in format_rows_debug(people, section):
+        print(line)
 
     layout = build_section_layout_simple(sections)
-
-    fig, anim = animate_evacuation(
-        history=history,
-        sections=sections,
-        layout=layout,
-        interval_ms=250,
+    snapshot = Snapshot(
+        time=0.0,
+        people=[
+            PersonState(
+                pid=person.pid,
+                group=person.group,
+                section_id=person.section_id,
+                x=person.x,
+                finished=person.finished,
+                exit_time=person.exit_time,
+            )
+            for person in people
+        ],
+        section_counts={section.sid: len(people)},
+        finished_count=0,
+        total_people=len(people),
     )
 
-    plt.show()
-
-    # пример:
-    # plot_snapshot_at_time(history, sections, layout, time_sec=5.0)
+    if HAS_MATPLOTLIB:
+        fig, ax = plt.subplots(figsize=(13, 6))
+        render_snapshot(ax, snapshot, sections, layout)
+        import os
+        os.makedirs("artifacts", exist_ok=True)
+        output_path = "artifacts/rows_demo.png"
+        fig.savefig(output_path, dpi=160, bbox_inches="tight")
+        print(f"Схема сохранена: {output_path}")
+    else:
+        print("matplotlib не установлен; сохранение схемы пропущено.")
