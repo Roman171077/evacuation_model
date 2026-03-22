@@ -41,6 +41,8 @@ python main.py
 python main2.py --mode realtime
 ```
 
+Для `main2.py` на Windows принудительно выбирается интерактивный backend `TkAgg`, а в headless Linux/macOS без `DISPLAY`/`WAYLAND_DISPLAY` используется `Agg`, поэтому при старте выводится активный backend matplotlib.
+
 ## Минимальный сценарий
 
 Сценарий `scenarios/test_case_1.py` содержит:

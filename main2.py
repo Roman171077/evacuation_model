@@ -4,6 +4,7 @@ import argparse
 from dataclasses import dataclass, field
 import importlib.util
 import os
+import sys
 from math import atan2, degrees, hypot
 from typing import Dict, List, Optional, Tuple
 
@@ -11,7 +12,10 @@ HAS_MATPLOTLIB = importlib.util.find_spec("matplotlib") is not None
 
 if HAS_MATPLOTLIB:
     import matplotlib
-    if not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY"):
+
+    if sys.platform.startswith("win"):
+        matplotlib.use("TkAgg")
+    elif not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY"):
         matplotlib.use("Agg")   # headless-friendly backend
     import matplotlib.pyplot as plt
     from matplotlib.animation import FuncAnimation
@@ -1271,6 +1275,9 @@ def parse_cli_args() -> argparse.Namespace:
 if __name__ == "__main__":
     args = parse_cli_args()
     sections, people, params = build_rows_demo_case()
+
+    if HAS_MATPLOTLIB and matplotlib is not None:
+        print(f"matplotlib backend = {matplotlib.get_backend()}")
 
     section = next(iter(sections.values()))
 
