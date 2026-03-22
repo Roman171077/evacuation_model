@@ -51,6 +51,24 @@ class MainRowBuildingTests(unittest.TestCase):
         self.assertFalse(people[1].can_fit_in_row)
         self.assertEqual(people[1].row_index, 1)
 
+    def test_transitive_x_overlap_chain_is_split_into_multiple_rows(self):
+        section = Segment("horizontal_1", "horizontal", length=12.0, width=2.0)
+        people = [
+            Person(pid=1, group="M0_3", section_id="horizontal_1", x=5.00),
+            Person(pid=2, group="M0_3", section_id="horizontal_1", x=5.20),
+            Person(pid=3, group="M0_3", section_id="horizontal_1", x=5.40),
+            Person(pid=4, group="M0_3", section_id="horizontal_1", x=5.60),
+        ]
+
+        rows = build_rows_on_section(people, section)
+
+        self.assertEqual(len(rows), 2)
+        self.assertEqual([p.pid for p in rows[0].people], [1, 2])
+        self.assertEqual([p.pid for p in rows[1].people], [3, 4])
+        self.assertEqual([person.row_index for person in people], [0, 0, 1, 1])
+        self.assertFalse(people[2].is_row_candidate)
+        self.assertTrue(people[3].is_row_candidate)
+
     def test_apply_row_geometry_moves_new_rows_back_along_x(self):
         section = Segment("horizontal_1", "horizontal", length=12.0, width=1.0)
         people = [

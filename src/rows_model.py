@@ -214,9 +214,21 @@ def get_person_interval_x(person: Person) -> Tuple[float, float]:
     return person_left, person_right
 
 
-def is_candidate_for_row(row: Row, person: Person) -> bool:
+ROW_X_ADJACENCY_TOLERANCE = 0.02
+
+
+def row_gap_x(row: Row, person: Person) -> float:
     person_left, person_right = get_person_interval_x(person)
-    return (person_left < row.row_right) and (person_right > row.row_left)
+
+    if person_right < row.row_left:
+        return row.row_left - person_right
+    if person_left > row.row_right:
+        return person_left - row.row_right
+    return 0.0
+
+
+def is_candidate_for_row(row: Row, person: Person) -> bool:
+    return row_gap_x(row, person) <= ROW_X_ADJACENCY_TOLERANCE
 
 
 def can_fit_into_row(row: Row, person: Person, section: Segment) -> bool:
@@ -225,6 +237,7 @@ def can_fit_into_row(row: Row, person: Person, section: Segment) -> bool:
 
 def add_person_to_row(row: Row, person: Person) -> None:
     person_left, person_right = get_person_interval_x(person)
+    row_center = row.center_x if row.people else person.x
     person.row_index = row.row_index
     person.place_in_row = len(row.people)
 
@@ -232,8 +245,10 @@ def add_person_to_row(row: Row, person: Person) -> None:
     row.used_width += person.a_geom
     row.source_left = min(row.source_left, person_left)
     row.source_right = max(row.source_right, person_right)
-    row.row_left = row.source_left
-    row.row_right = row.source_right
+
+    row_half_depth = row.depth / 2.0
+    row.row_left = row_center - row_half_depth
+    row.row_right = row_center + row_half_depth
 
 
 def create_new_row(row_index: int, person: Person) -> Row:
@@ -261,21 +276,13 @@ def assign_people_to_rows(people: List[Person], section: Segment) -> List[Row]:
         person.place_in_row = -1
 
         chosen_row: Optional[Row] = None
-        candidate_seen = False
+        previous_row = rows[-1] if rows else None
 
-        for row in rows:
-            candidate = is_candidate_for_row(row, person)
-            if not candidate:
-                continue
-
-            candidate_seen = True
-            width_ok = can_fit_into_row(row, person, section)
-            if width_ok:
-                chosen_row = row
-                break
-
-        person.is_row_candidate = candidate_seen
-        person.can_fit_in_row = chosen_row is not None
+        if previous_row is not None:
+            person.is_row_candidate = is_candidate_for_row(previous_row, person)
+            if person.is_row_candidate and can_fit_into_row(previous_row, person, section):
+                person.can_fit_in_row = True
+                chosen_row = previous_row
 
         if chosen_row is None:
             rows.append(create_new_row(len(rows), person))
