@@ -2,14 +2,18 @@ import unittest
 
 from main import (
     Person,
-    Segment,
     PersonState,
-    Snapshot,
+    SectionVisual,
+    Segment,
     SimulationParams,
     SinglePersonSingleSegmentModel,
+    Snapshot,
     apply_row_geometry_on_section,
+    build_rows_demo_case,
     build_rows_on_section,
+    build_section_layout_simple,
     compute_snapshot_visual_placements,
+    run_simulation_with_history,
 )
 
 
@@ -82,13 +86,77 @@ class MainRowBuildingTests(unittest.TestCase):
             front_person.x + front_person.c_geom / 2.0 - 1e-9,
         )
 
+    def test_person_transitions_to_next_section_with_remaining_distance(self):
+        sections = {
+            "horizontal_1": Segment(
+                "horizontal_1",
+                "horizontal",
+                length=10.0,
+                width=2.0,
+                exit_width=1.2,
+                next_section_id="horizontal_2",
+            ),
+            "horizontal_2": Segment(
+                "horizontal_2",
+                "horizontal",
+                length=8.0,
+                width=2.0,
+                exit_width=1.2,
+                merge_lj=1.5,
+            ),
+        }
+        people = [Person(pid=1, group="M0_3", section_id="horizontal_1", x=0.2)]
+        params = SimulationParams(dt=1.0, max_time=10.0)
+        model = SinglePersonSingleSegmentModel(sections, people, params)
+
+        model.step()
+
+        self.assertFalse(people[0].finished)
+        self.assertEqual(people[0].section_id, "horizontal_2")
+        self.assertAlmostEqual(people[0].x, 5.03, places=2)
+
+    def test_demo_input_data_builder_is_exported_from_input_component(self):
+        self.assertEqual(build_rows_demo_case.__module__, "src.input_data_component")
+
+    def test_run_simulation_with_history_supports_demo_multi_segment_case(self):
+        scenario = build_rows_demo_case()
+
+        result, history = run_simulation_with_history(scenario, snapshot_interval=0.5, verbose=False)
+
+        self.assertEqual(result["finished_count"], result["total_people"])
+        self.assertGreater(result["modeled_path_length_m"], 50.0)
+        self.assertGreater(len(history), 1)
+        self.assertIn("horizontal_1", history[0].section_counts)
+        self.assertIn("horizontal_2", history[0].section_counts)
+
     def test_visual_api_is_exported_from_separate_module(self):
         self.assertEqual(compute_snapshot_visual_placements.__module__, "src.visualization")
 
-    def test_demo_input_data_builder_is_exported_from_input_component(self):
-        from main import build_rows_demo_case
+    def test_build_section_layout_simple_keeps_multi_segment_chain(self):
+        sections = {
+            "horizontal_1": Segment(
+                "horizontal_1",
+                "horizontal",
+                length=12.0,
+                width=2.0,
+                exit_width=1.2,
+                next_section_id="horizontal_2",
+            ),
+            "horizontal_2": Segment(
+                "horizontal_2",
+                "horizontal",
+                length=8.0,
+                width=2.0,
+                exit_width=1.2,
+            ),
+        }
 
-        self.assertEqual(build_rows_demo_case.__module__, "src.input_data_component")
+        layout = build_section_layout_simple(sections)
+
+        self.assertEqual(layout["horizontal_1"].start, (0.0, 4.0))
+        self.assertEqual(layout["horizontal_1"].end, (12.0, 4.0))
+        self.assertEqual(layout["horizontal_2"].start, (12.0, 4.0))
+        self.assertEqual(layout["horizontal_2"].end, (20.0, 4.0))
 
     def test_visual_placements_keep_people_of_same_row_on_same_x_band(self):
         section = Segment("horizontal_1", "horizontal", length=12.0, width=2.0, exit_width=1.2)
@@ -104,7 +172,6 @@ class MainRowBuildingTests(unittest.TestCase):
             finished_count=0,
             total_people=4,
         )
-        from main import SectionVisual
         layout = {"horizontal_1": SectionVisual(start=(0.0, 4.0), end=(12.0, 4.0))}
 
         placements = compute_snapshot_visual_placements(snapshot, {"horizontal_1": section}, layout)
@@ -117,6 +184,44 @@ class MainRowBuildingTests(unittest.TestCase):
         self.assertLess(abs(placements_by_pid[1].center[0] - placements_by_pid[2].center[0]), 0.15)
         self.assertLess(abs(placements_by_pid[2].center[0] - placements_by_pid[3].center[0]), 0.15)
         self.assertLess(placements_by_pid[4].center[0], placements_by_pid[1].center[0])
+
+    def test_visual_placements_support_people_on_multiple_sections(self):
+        sections = {
+            "horizontal_1": Segment(
+                "horizontal_1",
+                "horizontal",
+                length=12.0,
+                width=2.0,
+                exit_width=1.2,
+                next_section_id="horizontal_2",
+            ),
+            "horizontal_2": Segment(
+                "horizontal_2",
+                "horizontal",
+                length=10.0,
+                width=2.0,
+                exit_width=1.2,
+            ),
+        }
+        snapshot = Snapshot(
+            time=1.0,
+            people=[
+                PersonState(pid=1, group="M0_3", section_id="horizontal_1", x=4.0, finished=False, exit_time=None),
+                PersonState(pid=2, group="M0_3", section_id="horizontal_2", x=9.0, finished=False, exit_time=None),
+            ],
+            section_counts={"horizontal_1": 1, "horizontal_2": 1},
+            finished_count=0,
+            total_people=2,
+        )
+        layout = build_section_layout_simple(sections)
+
+        placements = compute_snapshot_visual_placements(snapshot, sections, layout)
+        placements_by_pid = {placement.pid: placement for placement in placements}
+
+        self.assertIn(1, placements_by_pid)
+        self.assertIn(2, placements_by_pid)
+        self.assertLess(placements_by_pid[1].center[0], layout["horizontal_1"].end[0])
+        self.assertGreater(placements_by_pid[2].center[0], layout["horizontal_2"].start[0])
 
 
 if __name__ == "__main__":

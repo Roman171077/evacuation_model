@@ -161,10 +161,11 @@ def main() -> None:
             fig.savefig(output_path, dpi=160, bbox_inches='tight')
             print(f'Схема сохранена: {output_path}')
 
-        print(f"Время эвакуации: {float(result['travel_time_sec']):.2f} c")
-        print(f"Эвакуировано: {int(result['finished_count'])}/{int(result['total_people'])}")
     else:
         print('matplotlib не установлен; сохранение схемы пропущено.')
+
+    print(f"Время эвакуации: {float(result['travel_time_sec']):.2f} c")
+    print(f"Эвакуировано: {int(result['finished_count'])}/{int(result['total_people'])}")
 
 
 if __name__ == '__main__':
