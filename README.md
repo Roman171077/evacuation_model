@@ -14,8 +14,8 @@
 - `src/simulation/formulas.py` — инженерные формулы и коэффициенты.
 - `src/simulation/simulation.py` — ядро `EvacuationModel` (`step`, `run`).
 - `scenarios/` — сценарии, возвращающие `(sections, people, params)`.
-- `main.py` — совместимый entrypoint, перенаправляющий запуск на `main2.py`.
-- `main2.py` — сценарий геометрического формирования рядов и orchestration CLI.
+- `main.py` — основной entrypoint CLI, orchestration расчета и визуализации.
+- `src/input_data_component.py` — отдельный компонент вывода вводных данных, характеристик участка и людей.
 - `src/rows_model.py` — расчетная часть формирования рядов, истории состояний и сценарии.
 - `src/visualization.py` — отдельный компонент визуализации на matplotlib.
 
@@ -34,16 +34,16 @@
 - не учитываются обгоны и 2D-маневрирование;
 - не моделируются психологические эффекты и сопровождение;
 - очередь моделируется координатами ожидания у выхода.
-- в `main2.py` этап формирования потока отделен от расчета плотности: ряд определяется по `c_geom`, а вместимость ряда по ширине — по `a_geom` и `Segment.width`.
+- в `main.py` этап формирования потока отделен от расчета плотности: ряд определяется по `c_geom`, а вместимость ряда по ширине — по `a_geom` и `Segment.width`.
 
 ## Запуск
 
 ```bash
 python main.py
-python main2.py --mode realtime
+python main.py --mode realtime
 ```
 
-Для `main2.py` на Windows принудительно выбирается интерактивный backend `TkAgg`, а в headless Linux/macOS без `DISPLAY`/`WAYLAND_DISPLAY` используется `Agg`, поэтому при старте выводится активный backend matplotlib.
+Для `main.py` на Windows принудительно выбирается интерактивный backend `TkAgg`, а в headless Linux/macOS без `DISPLAY`/`WAYLAND_DISPLAY` используется `Agg`, поэтому при старте выводится активный backend matplotlib.
 
 ## Минимальный сценарий
 
