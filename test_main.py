@@ -105,6 +105,27 @@ class MainRowBuildingTests(unittest.TestCase):
         self.assertTrue(all(abs(person.x - rows[1].center_x) < 1e-9 for person in rows[1].people))
         self.assertTrue(all(abs(person.x - rows[2].center_x) < 1e-9 for person in rows[2].people))
 
+    def test_apply_row_geometry_keeps_distant_groups_as_separate_flows(self):
+        section = Segment("horizontal_1", "horizontal", length=20.0, width=0.8)
+        people = [
+            Person(pid=1, group="M4_WHEELCHAIR", section_id="horizontal_1", x=5.00),
+            Person(pid=2, group="M4_WHEELCHAIR", section_id="horizontal_1", x=5.00),
+            Person(pid=3, group="M0_3", section_id="horizontal_1", x=8.50),
+            Person(pid=4, group="M0_3", section_id="horizontal_1", x=8.50),
+        ]
+
+        rows = apply_row_geometry_on_section(people, section)
+
+        self.assertEqual(len(rows), 4)
+        self.assertEqual([[person.pid for person in row.people] for row in rows], [[1], [2], [3], [4]])
+        self.assertAlmostEqual(rows[1].row_left, rows[0].row_right)
+        self.assertAlmostEqual(rows[3].row_left, rows[2].row_right)
+        self.assertGreater(rows[2].row_left - rows[1].row_right, 1.0)
+        self.assertAlmostEqual(people[0].x, 5.00)
+        self.assertAlmostEqual(people[1].x, 6.20)
+        self.assertAlmostEqual(people[2].x, 8.50)
+        self.assertAlmostEqual(people[3].x, 8.78, places=2)
+
     def test_step_rebuilds_packed_multi_row_flow(self):
         section = Segment("horizontal_1", "horizontal", length=20.0, width=2.0)
         people = [

@@ -292,31 +292,52 @@ def assign_people_to_rows(people: List[Person], section: Segment) -> List[Row]:
     return rows
 
 
+def split_rows_into_independent_flows(rows: List[Row]) -> List[List[Row]]:
+    if not rows:
+        return []
+
+    sorted_rows = sorted(rows, key=lambda row: (row.source_left + row.source_right) / 2.0)
+    flows: List[List[Row]] = [[sorted_rows[0]]]
+
+    for row in sorted_rows[1:]:
+        previous_row = flows[-1][-1]
+        source_gap = row.source_left - previous_row.source_right
+
+        if source_gap > ROW_X_ADJACENCY_TOLERANCE:
+            flows.append([row])
+        else:
+            flows[-1].append(row)
+
+    return flows
+
+
 def pack_rows_tightly(rows: List[Row]) -> None:
     if not rows:
         return
 
-    rows.sort(key=lambda row: (row.source_left + row.source_right) / 2.0)
+    next_row_index = 0
+    for flow_rows in split_rows_into_independent_flows(rows):
+        previous_row: Optional[Row] = None
 
-    previous_row: Optional[Row] = None
-    for row_index, row in enumerate(rows):
-        row.row_index = row_index
-        row_half_depth = row.depth / 2.0
+        for row in flow_rows:
+            row.row_index = next_row_index
+            row_half_depth = row.depth / 2.0
 
-        if previous_row is None:
-            row_center = (row.source_left + row.source_right) / 2.0
-        else:
-            row_center = previous_row.row_right + row_half_depth
+            if previous_row is None:
+                row_center = (row.source_left + row.source_right) / 2.0
+            else:
+                row_center = previous_row.row_right + row_half_depth
 
-        row.row_left = row_center - row_half_depth
-        row.row_right = row_center + row_half_depth
+            row.row_left = row_center - row_half_depth
+            row.row_right = row_center + row_half_depth
 
-        for place_in_row, person in enumerate(row.people):
-            person.x = row_center
-            person.row_index = row_index
-            person.place_in_row = place_in_row
+            for place_in_row, person in enumerate(row.people):
+                person.x = row_center
+                person.row_index = next_row_index
+                person.place_in_row = place_in_row
 
-        previous_row = row
+            previous_row = row
+            next_row_index += 1
 
 
 def build_rows_on_section(
