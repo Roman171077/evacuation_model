@@ -1,6 +1,6 @@
 import unittest
 
-from main2 import (
+from main import (
     Person,
     Segment,
     PersonState,
@@ -96,7 +96,7 @@ class Main2RowBuildingTests(unittest.TestCase):
             finished_count=0,
             total_people=4,
         )
-        from main2 import SectionVisual
+        from main import SectionVisual
         layout = {"horizontal_1": SectionVisual(start=(0.0, 4.0), end=(12.0, 4.0))}
 
         placements = compute_snapshot_visual_placements(snapshot, {"horizontal_1": section}, layout)
