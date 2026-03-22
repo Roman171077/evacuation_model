@@ -562,7 +562,10 @@ def add_person_to_row(row: Row, person: Person) -> None:
     row.row_right = max(row.row_right, person_right)
 
 
-def create_new_row(row_index: int, person: Person) -> Row:
+def create_new_row(row_index: int, person: Person, min_center_x: Optional[float] = None) -> Row:
+    if min_center_x is not None and person.x < min_center_x:
+        person.x = min_center_x
+
     person_left, person_right = get_person_interval_x(person)
     row = Row(
         row_index=row_index,
@@ -575,16 +578,22 @@ def create_new_row(row_index: int, person: Person) -> Row:
     return row
 
 
-def build_rows_on_section(people: List[Person], section: Segment) -> List[Row]:
+def build_rows_on_section(
+    people: List[Person],
+    section: Segment,
+    reposition_rows: bool = False,
+) -> List[Row]:
     if not people:
         return []
 
-    people_sorted = sorted(people, key=lambda p: p.x)
+    people_sorted = sorted(people, key=lambda p: (p.x, p.pid))
     rows: List[Row] = []
 
     for person in people_sorted:
         person.is_row_candidate = False
         person.can_fit_in_row = False
+        person.row_index = -1
+        person.place_in_row = -1
 
         if not rows:
             rows.append(create_new_row(0, person))
@@ -592,7 +601,7 @@ def build_rows_on_section(people: List[Person], section: Segment) -> List[Row]:
 
         current_row = rows[-1]
         candidate = is_candidate_for_row(current_row, person)
-        width_ok = can_fit_into_row(current_row, person, section)
+        width_ok = can_fit_into_row(current_row, person, section) if candidate else False
 
         person.is_row_candidate = candidate
         person.can_fit_in_row = width_ok
@@ -600,9 +609,21 @@ def build_rows_on_section(people: List[Person], section: Segment) -> List[Row]:
         if candidate and width_ok:
             add_person_to_row(current_row, person)
         else:
-            rows.append(create_new_row(len(rows), person))
+            min_center_x = None
+            if reposition_rows:
+                min_center_x = current_row.row_right + person.c_geom / 2.0
+
+            rows.append(create_new_row(len(rows), person, min_center_x=min_center_x))
 
     return rows
+
+
+def apply_row_geometry_on_section(people: List[Person], section: Segment) -> List[Row]:
+    """
+    Перестраивает людей по рядам и при необходимости сдвигает задние ряды назад по x,
+    чтобы ряды не пересекались.
+    """
+    return build_rows_on_section(people, section, reposition_rows=True)
 
 
 def compute_person_row_centers(row: Row, section: Segment) -> Dict[int, float]:
@@ -653,8 +674,10 @@ class SinglePersonSingleSegmentModel:
 
     def step(self) -> None:
         """
-        Основное уравнение движения:
-        x_i_t = x_i_prev - V_i_t * dt
+        Этап без плотности:
+        1) свободное движение каждого человека,
+        2) затем геометрическое восстановление рядов на участке,
+           чтобы люди не проходили сквозь впереди стоящие ряды.
         """
         section = self.section()
 
@@ -683,6 +706,12 @@ class SinglePersonSingleSegmentModel:
             person.finished = True
             person.exit_time = self.time + dt_to_exit
             person.section_id = "EXIT"
+
+        active_people = [
+            person for person in self.people
+            if not person.finished and person.section_id == section.sid
+        ]
+        apply_row_geometry_on_section(active_people, section)
 
     def run(self, verbose: bool = True) -> Dict[str, float | int | Dict[int, float | None]]:
         while not self.all_finished() and self.time < self.params.max_time:
@@ -728,6 +757,10 @@ def run_simulation(
     sections, people, params = scenario
     reset_model_state(people)
     model = SinglePersonSingleSegmentModel(sections, people, params)
+    apply_row_geometry_on_section(
+        [p for p in model.people if not p.finished and p.section_id == model.section().sid],
+        model.section(),
+    )
     return model.run(verbose=verbose)
 
 
@@ -772,6 +805,10 @@ def run_simulation_with_history(
     reset_model_state(people)
 
     model = SinglePersonSingleSegmentModel(sections, people, params)
+    apply_row_geometry_on_section(
+        [p for p in model.people if not p.finished and p.section_id == model.section().sid],
+        model.section(),
+    )
     history: List[Snapshot] = [build_snapshot(model, 0.0)]
 
     next_snapshot_time = snapshot_interval
