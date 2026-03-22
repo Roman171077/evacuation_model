@@ -38,7 +38,7 @@ ROWS_DEMO_PERSON_SPECS: tuple[dict[str, object], ...] = (
     {'pid': 2, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 45.00},
     {'pid': 3, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 45.50},
     {'pid': 4, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 46.00},
-    {'pid': 5, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 45.00},
+    {'pid': 5, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 46.00},
     {'pid': 6, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 46.50},
     {'pid': 7, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 47.00},
     {'pid': 8, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 47.50},
