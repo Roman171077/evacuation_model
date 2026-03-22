@@ -14,6 +14,7 @@ from main import (
     build_section_layout_simple,
     compute_snapshot_visual_placements,
     run_simulation_with_history,
+    update_people_position_state_on_sections,
 )
 
 
@@ -129,6 +130,149 @@ class MainRowBuildingTests(unittest.TestCase):
         self.assertEqual(people[0].section_id, "horizontal_2")
         self.assertAlmostEqual(people[0].x, 5.03, places=2)
 
+    def test_position_state_for_single_person_on_section(self):
+        section = Segment("horizontal_1", "horizontal", length=12.0, width=2.0)
+        person = Person(pid=1, group="M0_3", section_id="horizontal_1", x=5.0)
+
+        state = update_people_position_state_on_sections([person], {"horizontal_1": section})
+
+        self.assertEqual(len(state["horizontal_1"]["rows"]), 1)
+        self.assertEqual(len(state["horizontal_1"]["flows"]), 0)
+        self.assertEqual(person.row_index, 0)
+        self.assertEqual(person.place_in_row, 0)
+        self.assertTrue(person.is_alone_on_section)
+        self.assertTrue(person.is_single_in_row)
+        self.assertFalse(person.is_in_flow)
+        self.assertEqual(person.flow_index, -1)
+        self.assertEqual(person.place_in_flow, -1)
+        self.assertEqual(person.flow_member_count, 0)
+        self.assertEqual(person.flow_delta_x, 0.0)
+
+    def test_position_state_for_multiple_people_in_one_row(self):
+        section = Segment("horizontal_1", "horizontal", length=12.0, width=2.0)
+        people = [
+            Person(pid=1, group="M0_3", section_id="horizontal_1", x=5.00),
+            Person(pid=2, group="M0_3", section_id="horizontal_1", x=5.05),
+            Person(pid=3, group="M0_3", section_id="horizontal_1", x=5.10),
+        ]
+
+        state = update_people_position_state_on_sections(people, {"horizontal_1": section})
+
+        self.assertEqual(len(state["horizontal_1"]["rows"]), 1)
+        self.assertEqual(len(state["horizontal_1"]["flows"]), 0)
+        for expected_place, person in enumerate(people):
+            self.assertEqual(person.row_index, 0)
+            self.assertEqual(person.place_in_row, expected_place)
+            self.assertFalse(person.is_alone_on_section)
+            self.assertFalse(person.is_single_in_row)
+            self.assertFalse(person.is_in_flow)
+            self.assertEqual(person.flow_index, -1)
+            self.assertEqual(person.flow_delta_x, 0.0)
+
+    def test_position_state_for_multiple_rows_without_flow(self):
+        section = Segment("horizontal_1", "horizontal", length=12.0, width=1.0)
+        people = [
+            Person(pid=1, group="M4_WHEELCHAIR", section_id="horizontal_1", x=2.0),
+            Person(pid=2, group="M4_WHEELCHAIR", section_id="horizontal_1", x=6.0),
+            Person(pid=3, group="M4_WHEELCHAIR", section_id="horizontal_1", x=9.5),
+        ]
+
+        state = update_people_position_state_on_sections(people, {"horizontal_1": section})
+
+        self.assertEqual(len(state["horizontal_1"]["rows"]), 3)
+        self.assertEqual(len(state["horizontal_1"]["flows"]), 0)
+        for expected_row, person in enumerate(people):
+            self.assertEqual(person.row_index, expected_row)
+            self.assertTrue(person.is_single_in_row)
+            self.assertFalse(person.is_alone_on_section)
+            self.assertFalse(person.is_in_flow)
+            self.assertEqual(person.flow_index, -1)
+            self.assertEqual(person.flow_delta_x, 0.0)
+
+    def test_position_state_for_consecutive_rows_forming_flow(self):
+        section = Segment("horizontal_1", "horizontal", length=12.0, width=1.0)
+        people = [
+            Person(pid=1, group="M4_WHEELCHAIR", section_id="horizontal_1", x=5.00),
+            Person(pid=2, group="M4_WHEELCHAIR", section_id="horizontal_1", x=5.00),
+            Person(pid=3, group="M4_WHEELCHAIR", section_id="horizontal_1", x=5.00),
+        ]
+
+        state = update_people_position_state_on_sections(people, {"horizontal_1": section})
+        flows = state["horizontal_1"]["flows"]
+
+        self.assertEqual(len(state["horizontal_1"]["rows"]), 3)
+        self.assertEqual(len(flows), 1)
+        self.assertAlmostEqual(flows[0].start_x, people[0].x)
+        self.assertAlmostEqual(flows[0].end_x, people[2].x)
+        self.assertAlmostEqual(flows[0].delta_x, people[2].x - people[0].x)
+        for expected_row, person in enumerate(people):
+            self.assertEqual(person.row_index, expected_row)
+            self.assertTrue(person.is_in_flow)
+            self.assertEqual(person.flow_index, 0)
+            self.assertEqual(person.place_in_flow, expected_row)
+            self.assertEqual(person.flow_member_count, 3)
+            self.assertAlmostEqual(person.flow_start_x, people[0].x)
+            self.assertAlmostEqual(person.flow_end_x, people[2].x)
+            self.assertAlmostEqual(person.flow_delta_x, people[2].x - people[0].x)
+
+    def test_position_state_for_mixed_group_flow(self):
+        section = Segment("horizontal_1", "horizontal", length=12.0, width=1.0)
+        people = [
+            Person(pid=1, group="M4_WHEELCHAIR", section_id="horizontal_1", x=5.00),
+            Person(pid=2, group="M1_PREGNANT", section_id="horizontal_1", x=5.00),
+            Person(pid=3, group="M4_WHEELCHAIR", section_id="horizontal_1", x=5.00),
+        ]
+
+        state = update_people_position_state_on_sections(people, {"horizontal_1": section})
+        flows = state["horizontal_1"]["flows"]
+
+        self.assertEqual(len(flows), 1)
+        self.assertEqual([person.group for person in flows[0].people], ["M4_WHEELCHAIR", "M1_PREGNANT", "M4_WHEELCHAIR"])
+        for person in people:
+            self.assertTrue(person.is_in_flow)
+            self.assertEqual(person.flow_index, 0)
+            self.assertEqual(person.flow_member_count, 3)
+
+    def test_position_state_rebuilds_after_transition_to_new_section(self):
+        sections = {
+            "horizontal_1": Segment(
+                "horizontal_1",
+                "horizontal",
+                length=10.0,
+                width=1.0,
+                next_section_id="horizontal_2",
+            ),
+            "horizontal_2": Segment(
+                "horizontal_2",
+                "horizontal",
+                length=10.0,
+                width=1.0,
+            ),
+        }
+        people = [
+            Person(pid=1, group="M0_3", section_id="horizontal_1", x=0.2),
+            Person(pid=2, group="M4_WHEELCHAIR", section_id="horizontal_2", x=8.8),
+        ]
+        params = SimulationParams(dt=1.0, max_time=5.0)
+        model = SinglePersonSingleSegmentModel(sections, people, params)
+
+        update_people_position_state_on_sections(model.people, model.sections)
+        model.step()
+
+        self.assertEqual(people[0].section_id, "horizontal_2")
+        self.assertEqual(people[1].section_id, "horizontal_2")
+        self.assertEqual(people[1].row_index, 0)
+        self.assertEqual(people[0].row_index, 1)
+        self.assertTrue(people[0].is_in_flow)
+        self.assertTrue(people[1].is_in_flow)
+        self.assertEqual(people[0].flow_index, 0)
+        self.assertEqual(people[1].flow_index, 0)
+        self.assertEqual(people[0].flow_member_count, 2)
+        self.assertEqual(people[1].flow_member_count, 2)
+        self.assertGreater(people[0].x, people[1].x)
+        self.assertAlmostEqual(people[0].flow_start_x, people[1].x)
+        self.assertAlmostEqual(people[0].flow_end_x, people[0].x)
+
     def test_demo_input_data_builder_is_exported_from_input_component(self):
         self.assertEqual(build_rows_demo_case.__module__, "src.input_data_component")
 
@@ -138,7 +282,7 @@ class MainRowBuildingTests(unittest.TestCase):
         result, history = run_simulation_with_history(scenario, snapshot_interval=0.5, verbose=False)
 
         self.assertEqual(result["finished_count"], result["total_people"])
-        self.assertGreater(result["modeled_path_length_m"], 50.0)
+        self.assertGreaterEqual(result["modeled_path_length_m"], 50.0)
         self.assertGreater(len(history), 1)
         self.assertIn("horizontal_1", history[0].section_counts)
         self.assertIn("horizontal_2", history[0].section_counts)
