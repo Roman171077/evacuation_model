@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import os
 
-from src.input_data_component import print_input_data_summary
+from src.input_data_component import build_rows_demo_case, print_input_data_summary
 from src.rows_model import (
     FLOW_PROFILES,
     MOBILITY_GROUP_COLORS,
@@ -15,7 +15,6 @@ from src.rows_model import (
     SinglePersonSingleSegmentModel,
     Snapshot,
     apply_row_geometry_on_section,
-    build_rows_demo_case,
     build_rows_on_section,
     build_snapshot,
     build_test_case_simple,

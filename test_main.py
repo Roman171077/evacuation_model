@@ -85,6 +85,11 @@ class MainRowBuildingTests(unittest.TestCase):
     def test_visual_api_is_exported_from_separate_module(self):
         self.assertEqual(compute_snapshot_visual_placements.__module__, "src.visualization")
 
+    def test_demo_input_data_builder_is_exported_from_input_component(self):
+        from main import build_rows_demo_case
+
+        self.assertEqual(build_rows_demo_case.__module__, "src.input_data_component")
+
     def test_visual_placements_keep_people_of_same_row_on_same_x_band(self):
         section = Segment("horizontal_1", "horizontal", length=12.0, width=2.0, exit_width=1.2)
         snapshot = Snapshot(
