@@ -3,104 +3,74 @@ import unittest
 from main2 import (
     Person,
     Segment,
-    SimulationParams,
-    EvacuationModel,
-    compute_capacity_people_per_step,
-    compute_person_speed,
-    compute_section_flow_density,
+    PersonState,
+    Snapshot,
+    build_rows_on_section,
+    compute_snapshot_visual_placements,
 )
 
 
-class Main2MethodologyTests(unittest.TestCase):
-    def test_person_moves_by_x_equals_x_prev_minus_v_dt(self):
-        section = Segment("s1", "horizontal", length=10.0, width=2.0, exit_width=1.2)
-        person = Person(pid=1, group="M0_7", section_id="s1", x=5.0)
-        params = SimulationParams(dt=1.0, max_time=10.0)
-
-        model = EvacuationModel({"s1": section}, [person], params)
-        model.step()
-
-        expected_v = compute_person_speed(person, section, local_density=0.0)
-        self.assertAlmostEqual(person.v, expected_v, places=9)
-        self.assertAlmostEqual(person.x, 5.0 - expected_v * params.dt, places=9)
-
-    def test_transition_uses_lj_formula(self):
-        sections = {
-            "s1": Segment("s1", "horizontal", length=1.0, width=2.0, exit_width=5.0, next_section_id="s2"),
-            "s2": Segment("s2", "horizontal", length=5.0, width=2.0, exit_width=5.0, merge_lj=1.5),
-        }
-        person = Person(pid=1, group="M0_7", section_id="s1", x=0.1)
-        params = SimulationParams(dt=1.0, max_time=10.0)
-
-        model = EvacuationModel(sections, [person], params)
-        model.step()
-
-        expected_x_raw = 0.1 - compute_person_speed(person, sections["s1"], 0.0) * params.dt
-        expected_x_new = expected_x_raw + sections["s2"].length - sections["s2"].merge_lj
-        self.assertEqual(person.section_id, "s2")
-        self.assertAlmostEqual(person.x_raw, expected_x_raw, places=9)
-        self.assertAlmostEqual(person.x, expected_x_new, places=9)
-
-    def test_capacity_formula_allows_everyone_when_m_not_greater_than_q(self):
-        section = Segment("s1", "horizontal", length=1.0, width=2.0, exit_width=5.0)
-        people = [Person(pid=1, group="M0_7", section_id="s1", x=0.1)]
-        params = SimulationParams(dt=1.0, max_time=10.0)
-
-        allowed = compute_capacity_people_per_step(people, section, params)
-        self.assertGreaterEqual(allowed, 1)
-
-        model = EvacuationModel({"s1": section}, people, params)
-        model.step()
-        self.assertTrue(people[0].finished)
-
-    def test_queue_coordinates_and_order_are_preserved_when_capacity_is_insufficient(self):
-        section = Segment("s1", "horizontal", length=1.0, width=0.4, exit_width=0.0)
-        section.transfer_credit = 1.0
+class Main2RowBuildingTests(unittest.TestCase):
+    def test_wheelchair_and_three_m0_3_are_split_into_two_rows(self):
+        section = Segment("horizontal_1", "horizontal", length=12.0, width=2.0, exit_width=1.2)
         people = [
-            Person(pid=10, group="M0_7", section_id="s1", x=0.10),
-            Person(pid=7, group="M0_7", section_id="s1", x=0.20),
-            Person(pid=2, group="M0_7", section_id="s1", x=0.30),
+            Person(pid=1, group="M4_WHEELCHAIR", section_id="horizontal_1", x=5.00),
+            Person(pid=2, group="M0_3", section_id="horizontal_1", x=5.10),
+            Person(pid=3, group="M0_3", section_id="horizontal_1", x=5.15),
+            Person(pid=4, group="M0_3", section_id="horizontal_1", x=5.90),
         ]
-        params = SimulationParams(dt=1.0, max_time=10.0)
 
-        model = EvacuationModel({"s1": section}, people, params)
-        model.step()
+        rows = build_rows_on_section(people, section)
 
-        waiting = [p for p in people if not p.finished]
-        self.assertEqual([p.pid for p in waiting], [7, 2])
-        self.assertAlmostEqual(waiting[0].x, 0.25, places=9)
-        self.assertAlmostEqual(waiting[1].x, 0.50, places=9)
+        self.assertEqual(len(rows), 2)
+        self.assertEqual([p.pid for p in rows[0].people], [1, 2, 3])
+        self.assertEqual([p.pid for p in rows[1].people], [4])
+        self.assertEqual((people[0].row_index, people[0].place_in_row), (0, 0))
+        self.assertEqual((people[1].row_index, people[1].place_in_row), (0, 1))
+        self.assertEqual((people[2].row_index, people[2].place_in_row), (0, 2))
+        self.assertEqual((people[3].row_index, people[3].place_in_row), (1, 0))
 
-    def test_flow_density_matches_p75_formula(self):
-        section = Segment("s1", "horizontal", length=10.0, width=2.0, exit_width=1.2)
+    def test_person_starts_new_row_when_width_is_exceeded(self):
+        section = Segment("horizontal_1", "horizontal", length=12.0, width=1.0, exit_width=1.0)
         people = [
-            Person(pid=1, group="M0_7", section_id="s1", x=9.0),
-            Person(pid=2, group="M0_7", section_id="s1", x=8.0),
+            Person(pid=1, group="M4_WHEELCHAIR", section_id="horizontal_1", x=5.00),
+            Person(pid=2, group="M0_3", section_id="horizontal_1", x=5.10),
         ]
-        params = SimulationParams(dt=0.5, max_time=10.0)
 
-        density = compute_section_flow_density(people, section, params)
-        expected = (2 * people[0].f * params.dt) / (section.length * section.width)
-        self.assertAlmostEqual(density, expected, places=9)
+        rows = build_rows_on_section(people, section)
 
-    def test_two_streams_merge_without_losing_people(self):
-        sections = {
-            "a": Segment("a", "horizontal", length=1.0, width=2.0, exit_width=5.0, next_section_id="c"),
-            "b": Segment("b", "horizontal", length=1.0, width=2.0, exit_width=5.0, next_section_id="c"),
-            "c": Segment("c", "horizontal", length=6.0, width=2.0, exit_width=5.0),
-        }
-        people = [
-            Person(pid=1, group="M0_7", section_id="a", x=0.10),
-            Person(pid=2, group="M3_ODA", section_id="b", x=0.10),
-        ]
-        params = SimulationParams(dt=1.0, max_time=10.0)
+        self.assertEqual(len(rows), 2)
+        self.assertTrue(people[1].is_row_candidate)
+        self.assertFalse(people[1].can_fit_in_row)
+        self.assertEqual(people[1].row_index, 1)
 
-        model = EvacuationModel(sections, people, params)
-        model.step()
+    def test_visual_placements_keep_people_of_same_row_on_same_x_band(self):
+        section = Segment("horizontal_1", "horizontal", length=12.0, width=2.0, exit_width=1.2)
+        snapshot = Snapshot(
+            time=0.0,
+            people=[
+                PersonState(pid=1, group="M4_WHEELCHAIR", section_id="horizontal_1", x=5.00, finished=False, exit_time=None),
+                PersonState(pid=2, group="M0_3", section_id="horizontal_1", x=5.10, finished=False, exit_time=None),
+                PersonState(pid=3, group="M0_3", section_id="horizontal_1", x=5.15, finished=False, exit_time=None),
+                PersonState(pid=4, group="M0_3", section_id="horizontal_1", x=5.90, finished=False, exit_time=None),
+            ],
+            section_counts={"horizontal_1": 4},
+            finished_count=0,
+            total_people=4,
+        )
+        from main2 import SectionVisual
+        layout = {"horizontal_1": SectionVisual(start=(0.0, 4.0), end=(12.0, 4.0))}
 
-        self.assertEqual(sum(1 for p in people if p.section_id == "c"), 2)
-        self.assertEqual(sum(1 for p in people if p.finished), 0)
-        self.assertCountEqual([p.pid for p in people], [1, 2])
+        placements = compute_snapshot_visual_placements(snapshot, {"horizontal_1": section}, layout)
+        placements_by_pid = {placement.pid: placement for placement in placements}
+
+        self.assertEqual(placements_by_pid[1].row_index, 0)
+        self.assertEqual(placements_by_pid[2].row_index, 0)
+        self.assertEqual(placements_by_pid[3].row_index, 0)
+        self.assertEqual(placements_by_pid[4].row_index, 1)
+        self.assertLess(abs(placements_by_pid[1].center[0] - placements_by_pid[2].center[0]), 0.15)
+        self.assertLess(abs(placements_by_pid[2].center[0] - placements_by_pid[3].center[0]), 0.15)
+        self.assertLess(placements_by_pid[4].center[0], placements_by_pid[1].center[0])
 
 
 if __name__ == "__main__":
