@@ -388,6 +388,15 @@ class Person:
     exit_time: Optional[float] = None
     row_index: int = -1
     place_in_row: int = -1
+    flow_index: int = -1
+    place_in_flow: int = -1
+    is_alone_on_section: bool = False
+    is_single_in_row: bool = False
+    is_in_flow: bool = False
+    flow_member_count: int = 0
+    flow_start_x: float = 0.0
+    flow_end_x: float = 0.0
+    flow_delta_x: float = 0.0
     is_row_candidate: bool = False
     can_fit_in_row: bool = False
 
@@ -458,12 +467,39 @@ class Row:
     longitudinal_shift: float = 0.0
 
 
+@dataclass
+class Flow:
+    flow_index: int
+    section_id: str
+    rows: List[Row] = field(default_factory=list)
+    people: List[Person] = field(default_factory=list)
+    start_x: float = 0.0
+    end_x: float = 0.0
+    delta_x: float = 0.0
+
+
 
 
 # =========================================================
 # РАСЧЕТНАЯ ЧАСТЬ
 # ЭТАП 1: свободное движение без плотности, с переходами между участками
 # =========================================================
+
+def reset_person_position_state(person: Person) -> None:
+    person.row_index = -1
+    person.place_in_row = -1
+    person.flow_index = -1
+    person.place_in_flow = -1
+    person.is_alone_on_section = False
+    person.is_single_in_row = False
+    person.is_in_flow = False
+    person.flow_member_count = 0
+    person.flow_start_x = 0.0
+    person.flow_end_x = 0.0
+    person.flow_delta_x = 0.0
+    person.is_row_candidate = False
+    person.can_fit_in_row = False
+
 
 def reset_model_state(people: List[Person]) -> None:
     for person in people:
@@ -473,10 +509,7 @@ def reset_model_state(people: List[Person]) -> None:
         person.x_raw = person.x
         person.finished = False
         person.exit_time = None
-        person.row_index = -1
-        person.place_in_row = -1
-        person.is_row_candidate = False
-        person.can_fit_in_row = False
+        reset_person_position_state(person)
 
 
 def get_person_interval_x(person: Person) -> Tuple[float, float]:
@@ -551,10 +584,7 @@ def build_rows_on_section(
     rows: List[Row] = []
 
     for person in people_sorted:
-        person.is_row_candidate = False
-        person.can_fit_in_row = False
-        person.row_index = -1
-        person.place_in_row = -1
+        reset_person_position_state(person)
 
         if not rows:
             rows.append(create_new_row(0, person))
@@ -586,6 +616,118 @@ def apply_row_geometry_on_section(people: List[Person], section: Segment) -> Lis
     return build_rows_on_section(people, section, reposition_rows=True)
 
 
+def rows_are_consecutive(front_row: Row, back_row: Row, eps: float = 1e-9) -> bool:
+    return back_row.row_left <= front_row.row_right + eps
+
+
+def build_flows_on_section(rows: List[Row], section: Segment) -> List[Flow]:
+    if not rows:
+        return []
+
+    flows: List[Flow] = []
+    current_chain: List[Row] = [rows[0]]
+
+    def finalize_chain(chain: List[Row]) -> None:
+        if len(chain) <= 1:
+            return
+
+        flow_people = sorted(
+            [person for row in chain for person in row.people],
+            key=lambda person: (person.x, person.pid),
+        )
+        first_person = flow_people[0]
+        last_person = flow_people[-1]
+        start_x = first_person.x
+        end_x = last_person.x
+        flows.append(
+            Flow(
+                flow_index=len(flows),
+                section_id=section.sid,
+                rows=list(chain),
+                people=flow_people,
+                start_x=start_x,
+                end_x=end_x,
+                delta_x=end_x - start_x,
+            )
+        )
+
+    for row in rows[1:]:
+        if rows_are_consecutive(current_chain[-1], row):
+            current_chain.append(row)
+            continue
+
+        finalize_chain(current_chain)
+        current_chain = [row]
+
+    finalize_chain(current_chain)
+    return flows
+
+
+def update_person_position_state(
+    section_people: List[Person],
+    rows: List[Row],
+    flows: List[Flow],
+) -> None:
+    is_single_person_on_section = len(section_people) == 1
+
+    for person in section_people:
+        person.is_alone_on_section = is_single_person_on_section
+        person.is_single_in_row = False
+        person.is_in_flow = False
+        person.flow_index = -1
+        person.place_in_flow = -1
+        person.flow_member_count = 0
+        person.flow_start_x = 0.0
+        person.flow_end_x = 0.0
+        person.flow_delta_x = 0.0
+
+    for row in rows:
+        row_size = len(row.people)
+        for person in row.people:
+            person.is_single_in_row = row_size == 1
+
+    for flow in flows:
+        member_count = len(flow.people)
+        for place_in_flow, person in enumerate(flow.people):
+            person.is_in_flow = True
+            person.flow_index = flow.flow_index
+            person.place_in_flow = place_in_flow
+            person.flow_member_count = member_count
+            person.flow_start_x = flow.start_x
+            person.flow_end_x = flow.end_x
+            person.flow_delta_x = flow.delta_x
+
+
+def update_people_position_state_on_sections(
+    people: List[Person],
+    sections: Dict[str, Segment],
+) -> Dict[str, Dict[str, List[Row] | List[Flow]]]:
+    active_people_by_section: Dict[str, List[Person]] = {sid: [] for sid in sections.keys()}
+
+    for person in people:
+        if person.finished:
+            reset_person_position_state(person)
+            continue
+
+        reset_person_position_state(person)
+        if person.section_id in active_people_by_section:
+            active_people_by_section[person.section_id].append(person)
+
+    section_state: Dict[str, Dict[str, List[Row] | List[Flow]]] = {}
+
+    for sid, section_people in active_people_by_section.items():
+        if not section_people:
+            section_state[sid] = {"rows": [], "flows": []}
+            continue
+
+        rows = apply_row_geometry_on_section(section_people, sections[sid])
+        flows = build_flows_on_section(rows, sections[sid])
+        update_person_position_state(section_people, rows, flows)
+        section_state[sid] = {"rows": rows, "flows": flows}
+
+    return section_state
+
+
 def compute_person_row_centers(row: Row, section: Segment) -> Dict[int, float]:
     del section
     centers: Dict[int, float] = {}
@@ -612,17 +754,7 @@ def compute_person_speed_stage1(person: Person, section: Segment) -> float:
 
 
 def apply_row_geometry_on_sections(people: List[Person], sections: Dict[str, Segment]) -> None:
-    active_people_by_section: Dict[str, List[Person]] = {sid: [] for sid in sections.keys()}
-
-    for person in people:
-        if person.finished:
-            continue
-        if person.section_id in active_people_by_section:
-            active_people_by_section[person.section_id].append(person)
-
-    for sid, section_people in active_people_by_section.items():
-        if section_people:
-            apply_row_geometry_on_section(section_people, sections[sid])
+    update_people_position_state_on_sections(people, sections)
 
 
 class SinglePersonSingleSegmentModel:
@@ -690,14 +822,15 @@ class SinglePersonSingleSegmentModel:
         Этап без плотности:
         1) свободное движение каждого человека,
         2) переходы между соседними участками,
-        3) затем геометрическое восстановление рядов на каждом участке.
+        3) затем отдельное обновление состояния положения на участках
+           (ряды, потоки, флаги положения человека).
         """
         for person in self.people:
             if person.finished:
                 continue
             self._move_person(person)
 
-        apply_row_geometry_on_sections(self.people, self.sections)
+        update_people_position_state_on_sections(self.people, self.sections)
 
     def build_result(self) -> Dict[str, float | int | Dict[int, float | None]]:
         total_path_length = sum(section.length for section in self.sections.values())

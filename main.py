@@ -6,6 +6,7 @@ import os
 from src.input_data_component import build_rows_demo_case, print_input_data_summary
 from src.rows_model import (
     FLOW_PROFILES,
+    Flow,
     MOBILITY_GROUP_COLORS,
     Person,
     PersonState,
@@ -31,6 +32,7 @@ from src.rows_model import (
     reset_model_state,
     run_simulation,
     run_simulation_with_history,
+    update_people_position_state_on_sections,
 )
 from src.visualization import (
     HAS_MATPLOTLIB,
@@ -49,6 +51,7 @@ from src.visualization import (
 
 __all__ = [
     'FLOW_PROFILES',
+    'Flow',
     'HAS_MATPLOTLIB',
     'MOBILITY_GROUP_COLORS',
     'Person',
@@ -90,6 +93,7 @@ __all__ = [
     'run_simulation',
     'run_simulation_with_history',
     'show_realtime_evacuation',
+    'update_people_position_state_on_sections',
 ]
 
 
