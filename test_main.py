@@ -66,6 +66,22 @@ class MainRowBuildingTests(unittest.TestCase):
         self.assertAlmostEqual(people[1].x, 6.20)
         self.assertAlmostEqual(people[2].x, 6.94)
 
+    def test_build_rows_keeps_multiple_people_with_same_x_in_back_row(self):
+        section = Segment("horizontal_1", "horizontal", length=12.0, width=2.0)
+        people = [
+            Person(pid=pid, group="M0_3", section_id="horizontal_1", x=5.00)
+            for pid in range(1, 10)
+        ]
+
+        rows = build_rows_on_section(people, section)
+
+        self.assertEqual(len(rows), 3)
+        self.assertEqual(len(rows[0].people), 4)
+        self.assertEqual(len(rows[1].people), 4)
+        self.assertGreater(len(rows[1].people), 1)
+        self.assertEqual(len(rows[2].people), 1)
+        self.assertEqual([person.pid for person in rows[1].people], [5, 6, 7, 8])
+
     def test_step_prevents_back_row_from_passing_front_row(self):
         section = Segment("horizontal_1", "horizontal", length=12.0, width=1.0)
         people = [

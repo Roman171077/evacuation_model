@@ -455,6 +455,7 @@ class Row:
     row_right: float
     used_width: float = 0.0
     people: List[Person] = field(default_factory=list)
+    longitudinal_shift: float = 0.0
 
 
 
@@ -504,10 +505,7 @@ def add_person_to_row(row: Row, person: Person) -> None:
     row.row_right = max(row.row_right, person_right)
 
 
-def create_new_row(row_index: int, person: Person, min_center_x: Optional[float] = None) -> Row:
-    if min_center_x is not None and person.x < min_center_x:
-        person.x = min_center_x
-
+def create_new_row(row_index: int, person: Person) -> Row:
     person_left, person_right = get_person_interval_x(person)
     row = Row(
         row_index=row_index,
@@ -515,9 +513,30 @@ def create_new_row(row_index: int, person: Person, min_center_x: Optional[float]
         row_right=person_right,
         used_width=0.0,
         people=[],
+        longitudinal_shift=0.0,
     )
     add_person_to_row(row, person)
     return row
+
+
+def apply_longitudinal_row_offsets(rows: List[Row]) -> None:
+    previous_row_right: Optional[float] = None
+
+    for row in rows:
+        original_left = min(person.x - person.c_geom / 2.0 for person in row.people)
+        original_right = max(person.x + person.c_geom / 2.0 for person in row.people)
+
+        row.longitudinal_shift = 0.0
+        if previous_row_right is not None:
+            row.longitudinal_shift = max(0.0, previous_row_right - original_left)
+
+        if row.longitudinal_shift > 0.0:
+            for person in row.people:
+                person.x += row.longitudinal_shift
+
+        row.row_left = original_left + row.longitudinal_shift
+        row.row_right = original_right + row.longitudinal_shift
+        previous_row_right = row.row_right
 
 
 def build_rows_on_section(
@@ -551,11 +570,10 @@ def build_rows_on_section(
         if candidate and width_ok:
             add_person_to_row(current_row, person)
         else:
-            min_center_x = None
-            if reposition_rows:
-                min_center_x = current_row.row_right + person.c_geom / 2.0
+            rows.append(create_new_row(len(rows), person))
 
-            rows.append(create_new_row(len(rows), person, min_center_x=min_center_x))
+    if reposition_rows:
+        apply_longitudinal_row_offsets(rows)
 
     return rows
 
