@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import argparse
 from dataclasses import dataclass, field
 import importlib.util
+import os
 from math import atan2, degrees, hypot
 from typing import Dict, List, Optional, Tuple
 
@@ -9,7 +11,8 @@ HAS_MATPLOTLIB = importlib.util.find_spec("matplotlib") is not None
 
 if HAS_MATPLOTLIB:
     import matplotlib
-    matplotlib.use("Agg")   # headless-friendly backend
+    if not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY"):
+        matplotlib.use("Agg")   # headless-friendly backend
     import matplotlib.pyplot as plt
     from matplotlib.animation import FuncAnimation
     from matplotlib.patches import Ellipse
@@ -627,8 +630,8 @@ class SinglePersonSingleSegmentModel:
     def __init__(self, sections: Dict[str, Segment], people: List[Person], params: SimulationParams):
         if len(sections) != 1:
             raise ValueError("На этапе 1 должен быть только один участок.")
-        if len(people) != 1:
-            raise ValueError("На этапе 1 должен быть только один человек.")
+        if not people:
+            raise ValueError("В сценарии должен быть хотя бы один человек.")
 
         self.sections = sections
         self.people = people
@@ -642,64 +645,75 @@ class SinglePersonSingleSegmentModel:
         return self.people[0]
 
     def all_finished(self) -> bool:
-        return self.person().finished
+        return all(person.finished for person in self.people)
 
     def step(self) -> None:
         """
         Основное уравнение движения:
         x_i_t = x_i_prev - V_i_t * dt
         """
-        person = self.person()
-        if person.finished:
-            return
-
         section = self.section()
 
-        person.v = compute_person_speed_stage1(person, section)
+        for person in self.people:
+            if person.finished:
+                continue
 
-        x_prev = person.x
-        person.x_raw = x_prev - person.v * self.params.dt
+            person.v = compute_person_speed_stage1(person, section)
 
-        if person.x_raw > 0:
-            person.x = person.x_raw
-            return
+            x_prev = person.x
+            person.x_raw = x_prev - person.v * self.params.dt
 
-        # человек дошел до конца участка;
-        # уточняем время внутри последнего шага
-        if person.v > 0:
-            dt_to_exit = x_prev / person.v
-            dt_to_exit = min(max(dt_to_exit, 0.0), self.params.dt)
-        else:
-            dt_to_exit = self.params.dt
+            if person.x_raw > 0:
+                person.x = person.x_raw
+                continue
 
-        person.x = 0.0
-        person.finished = True
-        person.exit_time = self.time + dt_to_exit
-        person.section_id = "EXIT"
+            # человек дошел до конца участка;
+            # уточняем время внутри последнего шага
+            if person.v > 0:
+                dt_to_exit = x_prev / person.v
+                dt_to_exit = min(max(dt_to_exit, 0.0), self.params.dt)
+            else:
+                dt_to_exit = self.params.dt
+
+            person.x = 0.0
+            person.finished = True
+            person.exit_time = self.time + dt_to_exit
+            person.section_id = "EXIT"
 
     def run(self, verbose: bool = True) -> Dict[str, float | int | Dict[int, float | None]]:
         while not self.all_finished() and self.time < self.params.max_time:
             self.step()
 
             if verbose and not self.all_finished() and int((self.time + self.params.dt) * 10) % 50 == 0:
+                active_people = [person for person in self.people if not person.finished]
+                lead_person = min(active_people, key=lambda person: person.x, default=None)
                 print(
                     f"t = {self.time + self.params.dt:.1f} c | "
-                    f"x = {self.person().x:.3f} м | "
-                    f"v = {self.person().v:.4f} м/с"
+                    f"в здании = {len(active_people)} | "
+                    f"ближайший к выходу x = {lead_person.x:.3f} м | "
+                    f"v = {lead_person.v:.4f} м/с"
+                    if lead_person is not None
+                    else f"t = {self.time + self.params.dt:.1f} c | все эвакуированы"
                 )
 
             self.time += self.params.dt
 
-        person = self.person()
         section = self.section()
 
         return {
             "segment_length_m": section.length,
-            "speed_m_per_s": person.v,
-            "travel_time_sec": person.exit_time if person.exit_time is not None else self.time,
-            "finished_count": 1 if person.finished else 0,
-            "total_people": 1,
-            "exit_times": {person.pid: person.exit_time},
+            "speed_m_per_s": max((person.v for person in self.people), default=0.0),
+            "travel_time_sec": max(
+                (
+                    person.exit_time
+                    for person in self.people
+                    if person.exit_time is not None
+                ),
+                default=self.time,
+            ),
+            "finished_count": sum(1 for person in self.people if person.finished),
+            "total_people": len(self.people),
+            "exit_times": {person.pid: person.exit_time for person in self.people},
         }
 
 
@@ -767,16 +781,28 @@ def run_simulation_with_history(
             next_snapshot_time += snapshot_interval
 
         if verbose and not model.all_finished() and int(model.time * 10) % 50 == 0:
+            active_people = [person for person in model.people if not person.finished]
+            lead_person = min(active_people, key=lambda person: person.x, default=None)
             print(
                 f"t = {model.time:.1f} c | "
-                f"x = {model.person().x:.3f} м | "
-                f"v = {model.person().v:.4f} м/с"
+                f"в здании = {len(active_people)} | "
+                f"ближайший к выходу x = {lead_person.x:.3f} м | "
+                f"v = {lead_person.v:.4f} м/с"
+                if lead_person is not None
+                else f"t = {model.time:.1f} c | все эвакуированы"
             )
 
     result = {
         "segment_length_m": model.section().length,
-        "speed_m_per_s": model.person().v,
-        "travel_time_sec": model.person().exit_time if model.person().exit_time is not None else model.time,
+        "speed_m_per_s": max((person.v for person in model.people), default=0.0),
+        "travel_time_sec": max(
+            (
+                person.exit_time
+                for person in model.people
+                if person.exit_time is not None
+            ),
+            default=model.time,
+        ),
         "finished_count": sum(1 for person in model.people if person.finished),
         "total_people": len(model.people),
         "exit_times": {person.pid: person.exit_time for person in model.people},
@@ -1180,11 +1206,70 @@ def animate_evacuation(
     return fig, anim
 
 
+def can_render_realtime() -> bool:
+    if not HAS_MATPLOTLIB or matplotlib is None:
+        return False
+    backend = matplotlib.get_backend().lower()
+    return "agg" not in backend
+
+
+def show_realtime_evacuation(
+    history: List[Snapshot],
+    sections: Dict[str, Segment],
+    layout: Dict[str, SectionVisual],
+    playback_speed: float = 1.0,
+) -> Tuple[plt.Figure, FuncAnimation]:
+    require_matplotlib()
+    if playback_speed <= 0:
+        raise ValueError("playback_speed должен быть больше 0.")
+
+    if len(history) >= 2:
+        snapshot_dt = max(history[1].time - history[0].time, 1e-3)
+    else:
+        snapshot_dt = 0.1
+
+    interval_ms = max(1, int(snapshot_dt * 1000 / playback_speed))
+    fig, anim = animate_evacuation(
+        history=history,
+        sections=sections,
+        layout=layout,
+        interval_ms=interval_ms,
+    )
+    plt.show()
+    return fig, anim
+
+
+def parse_cli_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Демонстрация геометрии рядов и эвакуации с визуализацией в реальном времени."
+    )
+    parser.add_argument(
+        "--mode",
+        choices=("realtime", "snapshot"),
+        default="realtime",
+        help="realtime — анимация по истории, snapshot — сохранить один статический кадр.",
+    )
+    parser.add_argument(
+        "--playback-speed",
+        type=float,
+        default=1.0,
+        help="Скорость проигрывания анимации относительно модельного времени.",
+    )
+    parser.add_argument(
+        "--snapshot-interval",
+        type=float,
+        default=0.1,
+        help="Шаг между кадрами истории, с.",
+    )
+    return parser.parse_args()
+
+
 # =========================================================
 # MAIN
 # =========================================================
 
 if __name__ == "__main__":
+    args = parse_cli_args()
     sections, people, params = build_rows_demo_case()
 
     section = next(iter(sections.values()))
@@ -1199,31 +1284,40 @@ if __name__ == "__main__":
         print(line)
 
     layout = build_section_layout_simple(sections)
-    snapshot = Snapshot(
-        time=0.0,
-        people=[
-            PersonState(
-                pid=person.pid,
-                group=person.group,
-                section_id=person.section_id,
-                x=person.x,
-                finished=person.finished,
-                exit_time=person.exit_time,
-            )
-            for person in people
-        ],
-        section_counts={section.sid: len(people)},
-        finished_count=0,
-        total_people=len(people),
+    result, history = run_simulation_with_history(
+        (sections, people, params),
+        snapshot_interval=args.snapshot_interval,
+        verbose=False,
     )
 
     if HAS_MATPLOTLIB:
-        fig, ax = plt.subplots(figsize=(13, 6))
-        render_snapshot(ax, snapshot, sections, layout)
-        import os
-        os.makedirs("artifacts", exist_ok=True)
-        output_path = "artifacts/rows_demo.png"
-        fig.savefig(output_path, dpi=160, bbox_inches="tight")
-        print(f"Схема сохранена: {output_path}")
+        if args.mode == "realtime" and can_render_realtime():
+            print(
+                "Запуск анимации в реальном времени "
+                f"(скорость воспроизведения x{args.playback_speed:.2f})."
+            )
+            _fig, _anim = show_realtime_evacuation(
+                history,
+                sections,
+                layout,
+                playback_speed=args.playback_speed,
+            )
+        else:
+            if args.mode == "realtime" and not can_render_realtime():
+                print(
+                    "Интерактивный backend matplotlib недоступен; "
+                    "сохраняю последний кадр вместо анимации."
+                )
+
+            snapshot = history[-1]
+            fig, ax = plt.subplots(figsize=(13, 6))
+            render_snapshot(ax, snapshot, sections, layout)
+            os.makedirs("artifacts", exist_ok=True)
+            output_path = "artifacts/rows_demo.png"
+            fig.savefig(output_path, dpi=160, bbox_inches="tight")
+            print(f"Схема сохранена: {output_path}")
+
+        print(f"Время эвакуации: {float(result['travel_time_sec']):.2f} c")
+        print(f"Эвакуировано: {int(result['finished_count'])}/{int(result['total_people'])}")
     else:
         print("matplotlib не установлен; сохранение схемы пропущено.")
