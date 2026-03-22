@@ -19,7 +19,7 @@ from main import (
 
 class MainRowBuildingTests(unittest.TestCase):
     def test_wheelchair_and_three_m0_3_are_split_into_two_rows(self):
-        section = Segment("horizontal_1", "horizontal", length=12.0, width=2.0, exit_width=1.2)
+        section = Segment("horizontal_1", "horizontal", length=12.0, width=2.0)
         people = [
             Person(pid=1, group="M4_WHEELCHAIR", section_id="horizontal_1", x=5.00),
             Person(pid=2, group="M0_3", section_id="horizontal_1", x=5.10),
@@ -38,7 +38,7 @@ class MainRowBuildingTests(unittest.TestCase):
         self.assertEqual((people[3].row_index, people[3].place_in_row), (1, 0))
 
     def test_person_starts_new_row_when_width_is_exceeded(self):
-        section = Segment("horizontal_1", "horizontal", length=12.0, width=1.0, exit_width=1.0)
+        section = Segment("horizontal_1", "horizontal", length=12.0, width=1.0)
         people = [
             Person(pid=1, group="M4_WHEELCHAIR", section_id="horizontal_1", x=5.00),
             Person(pid=2, group="M0_3", section_id="horizontal_1", x=5.10),
@@ -52,7 +52,7 @@ class MainRowBuildingTests(unittest.TestCase):
         self.assertEqual(people[1].row_index, 1)
 
     def test_apply_row_geometry_moves_new_rows_back_along_x(self):
-        section = Segment("horizontal_1", "horizontal", length=12.0, width=1.0, exit_width=1.0)
+        section = Segment("horizontal_1", "horizontal", length=12.0, width=1.0)
         people = [
             Person(pid=1, group="M4_WHEELCHAIR", section_id="horizontal_1", x=5.00),
             Person(pid=2, group="M4_WHEELCHAIR", section_id="horizontal_1", x=5.00),
@@ -67,7 +67,7 @@ class MainRowBuildingTests(unittest.TestCase):
         self.assertAlmostEqual(people[2].x, 6.94)
 
     def test_step_prevents_back_row_from_passing_front_row(self):
-        section = Segment("horizontal_1", "horizontal", length=12.0, width=1.0, exit_width=1.0)
+        section = Segment("horizontal_1", "horizontal", length=12.0, width=1.0)
         people = [
             Person(pid=1, group="M4_WHEELCHAIR", section_id="horizontal_1", x=5.00),
             Person(pid=2, group="M0_3", section_id="horizontal_1", x=5.20),
@@ -93,7 +93,6 @@ class MainRowBuildingTests(unittest.TestCase):
                 "horizontal",
                 length=10.0,
                 width=2.0,
-                exit_width=1.2,
                 next_section_id="horizontal_2",
             ),
             "horizontal_2": Segment(
@@ -101,7 +100,6 @@ class MainRowBuildingTests(unittest.TestCase):
                 "horizontal",
                 length=8.0,
                 width=2.0,
-                exit_width=1.2,
                 merge_lj=1.5,
             ),
         }
@@ -139,7 +137,6 @@ class MainRowBuildingTests(unittest.TestCase):
                 "horizontal",
                 length=12.0,
                 width=2.0,
-                exit_width=1.2,
                 next_section_id="horizontal_2",
             ),
             "horizontal_2": Segment(
@@ -147,7 +144,6 @@ class MainRowBuildingTests(unittest.TestCase):
                 "horizontal",
                 length=8.0,
                 width=2.0,
-                exit_width=1.2,
             ),
         }
 
@@ -159,7 +155,7 @@ class MainRowBuildingTests(unittest.TestCase):
         self.assertEqual(layout["horizontal_2"].end, (20.0, 4.0))
 
     def test_visual_placements_keep_people_of_same_row_on_same_x_band(self):
-        section = Segment("horizontal_1", "horizontal", length=12.0, width=2.0, exit_width=1.2)
+        section = Segment("horizontal_1", "horizontal", length=12.0, width=2.0)
         snapshot = Snapshot(
             time=0.0,
             people=[
@@ -192,7 +188,6 @@ class MainRowBuildingTests(unittest.TestCase):
                 "horizontal",
                 length=12.0,
                 width=2.0,
-                exit_width=1.2,
                 next_section_id="horizontal_2",
             ),
             "horizontal_2": Segment(
@@ -200,7 +195,6 @@ class MainRowBuildingTests(unittest.TestCase):
                 "horizontal",
                 length=10.0,
                 width=2.0,
-                exit_width=1.2,
             ),
         }
         snapshot = Snapshot(

@@ -370,7 +370,6 @@ class Segment:
     section_type: str
     length: float
     width: float
-    exit_width: float
     next_section_id: Optional[str] = None
     merge_lj: float = 0.0
     row_capacity: Optional[int] = None
@@ -817,7 +816,6 @@ def build_test_case_simple() -> tuple[dict[str, Segment], list[Person], Simulati
             section_type="horizontal",
             length=12.0,
             width=2.0,
-            exit_width=1.2,
             next_section_id=None,
         ),
     }
