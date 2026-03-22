@@ -20,6 +20,14 @@ ROWS_DEMO_SECTION_SPECS: tuple[dict[str, object], ...] = (
         'length': 50.0,
         'width': 2.0,
         'exit_width': 1.2,
+        'next_section_id': 'horizontal_2',
+    },
+    {
+        'sid': 'horizontal_2',
+        'section_type': 'horizontal',
+        'length': 50.0,
+        'width': 2.0,
+        'exit_width': 1.2,
         'next_section_id': None,
     },
 )
