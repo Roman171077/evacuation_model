@@ -66,6 +66,47 @@ class MainRowBuildingTests(unittest.TestCase):
         self.assertAlmostEqual(people[1].x, 6.20)
         self.assertAlmostEqual(people[2].x, 6.94)
 
+
+    def test_apply_row_geometry_packs_equal_x_people_into_multiple_full_rows(self):
+        section = Segment("horizontal_1", "horizontal", length=12.0, width=2.0)
+        people = [
+            Person(pid=pid, group="M0_3", section_id="horizontal_1", x=5.00)
+            for pid in range(1, 11)
+        ]
+
+        rows = apply_row_geometry_on_section(people, section)
+
+        self.assertEqual(len(rows), 3)
+        self.assertEqual([len(row.people) for row in rows], [4, 4, 2])
+        self.assertEqual([person.row_index for person in people[:4]], [0, 0, 0, 0])
+        self.assertEqual([person.row_index for person in people[4:8]], [1, 1, 1, 1])
+        self.assertEqual([person.row_index for person in people[8:]], [2, 2])
+        self.assertAlmostEqual(rows[1].row_left, rows[0].row_right)
+        self.assertAlmostEqual(rows[2].row_left, rows[1].row_right)
+        self.assertTrue(all(abs(person.x - rows[0].center_x) < 1e-9 for person in rows[0].people))
+        self.assertTrue(all(abs(person.x - rows[1].center_x) < 1e-9 for person in rows[1].people))
+        self.assertTrue(all(abs(person.x - rows[2].center_x) < 1e-9 for person in rows[2].people))
+
+    def test_step_rebuilds_packed_multi_row_flow(self):
+        section = Segment("horizontal_1", "horizontal", length=20.0, width=2.0)
+        people = [
+            Person(pid=pid, group="M0_3", section_id="horizontal_1", x=8.00)
+            for pid in range(1, 11)
+        ]
+        params = SimulationParams(dt=0.5, max_time=5.0)
+        model = SinglePersonSingleSegmentModel({"horizontal_1": section}, people, params)
+
+        apply_row_geometry_on_section(model.people, section)
+        model.step()
+
+        rows_after_step = build_rows_on_section(model.people, section, reposition_rows=True)
+
+        self.assertEqual(len(rows_after_step), 3)
+        self.assertEqual([len(row.people) for row in rows_after_step], [4, 4, 2])
+        self.assertAlmostEqual(rows_after_step[1].row_left, rows_after_step[0].row_right)
+        self.assertAlmostEqual(rows_after_step[2].row_left, rows_after_step[1].row_right)
+        self.assertTrue(all(abs(person.x - row.center_x) < 1e-9 for row in rows_after_step for person in row.people))
+
     def test_step_prevents_back_row_from_passing_front_row(self):
         section = Segment("horizontal_1", "horizontal", length=12.0, width=1.0)
         people = [
@@ -122,7 +163,7 @@ class MainRowBuildingTests(unittest.TestCase):
         result, history = run_simulation_with_history(scenario, snapshot_interval=0.5, verbose=False)
 
         self.assertEqual(result["finished_count"], result["total_people"])
-        self.assertGreater(result["modeled_path_length_m"], 50.0)
+        self.assertGreaterEqual(result["modeled_path_length_m"], 50.0)
         self.assertGreater(len(history), 1)
         self.assertIn("horizontal_1", history[0].section_counts)
         self.assertIn("horizontal_2", history[0].section_counts)

@@ -173,6 +173,18 @@ class Row:
     row_right: float
     used_width: float = 0.0
     people: List[Person] = field(default_factory=list)
+    source_left: float = 0.0
+    source_right: float = 0.0
+
+    @property
+    def depth(self) -> float:
+        if not self.people:
+            return 0.0
+        return max(person.c_geom for person in self.people)
+
+    @property
+    def center_x(self) -> float:
+        return (self.row_left + self.row_right) / 2.0
 
 
 
@@ -218,14 +230,13 @@ def add_person_to_row(row: Row, person: Person) -> None:
 
     row.people.append(person)
     row.used_width += person.a_geom
-    row.row_left = min(row.row_left, person_left)
-    row.row_right = max(row.row_right, person_right)
+    row.source_left = min(row.source_left, person_left)
+    row.source_right = max(row.source_right, person_right)
+    row.row_left = row.source_left
+    row.row_right = row.source_right
 
 
-def create_new_row(row_index: int, person: Person, min_center_x: Optional[float] = None) -> Row:
-    if min_center_x is not None and person.x < min_center_x:
-        person.x = min_center_x
-
+def create_new_row(row_index: int, person: Person) -> Row:
     person_left, person_right = get_person_interval_x(person)
     row = Row(
         row_index=row_index,
@@ -233,9 +244,72 @@ def create_new_row(row_index: int, person: Person, min_center_x: Optional[float]
         row_right=person_right,
         used_width=0.0,
         people=[],
+        source_left=person_left,
+        source_right=person_right,
     )
     add_person_to_row(row, person)
     return row
+
+
+def assign_people_to_rows(people: List[Person], section: Segment) -> List[Row]:
+    rows: List[Row] = []
+
+    for person in sorted(people, key=lambda p: (p.x, p.pid)):
+        person.is_row_candidate = False
+        person.can_fit_in_row = False
+        person.row_index = -1
+        person.place_in_row = -1
+
+        chosen_row: Optional[Row] = None
+        candidate_seen = False
+
+        for row in rows:
+            candidate = is_candidate_for_row(row, person)
+            if not candidate:
+                continue
+
+            candidate_seen = True
+            width_ok = can_fit_into_row(row, person, section)
+            if width_ok:
+                chosen_row = row
+                break
+
+        person.is_row_candidate = candidate_seen
+        person.can_fit_in_row = chosen_row is not None
+
+        if chosen_row is None:
+            rows.append(create_new_row(len(rows), person))
+        else:
+            add_person_to_row(chosen_row, person)
+
+    return rows
+
+
+def pack_rows_tightly(rows: List[Row]) -> None:
+    if not rows:
+        return
+
+    rows.sort(key=lambda row: (row.source_left + row.source_right) / 2.0)
+
+    previous_row: Optional[Row] = None
+    for row_index, row in enumerate(rows):
+        row.row_index = row_index
+        row_half_depth = row.depth / 2.0
+
+        if previous_row is None:
+            row_center = (row.source_left + row.source_right) / 2.0
+        else:
+            row_center = previous_row.row_right + row_half_depth
+
+        row.row_left = row_center - row_half_depth
+        row.row_right = row_center + row_half_depth
+
+        for place_in_row, person in enumerate(row.people):
+            person.x = row_center
+            person.row_index = row_index
+            person.place_in_row = place_in_row
+
+        previous_row = row
 
 
 def build_rows_on_section(
@@ -246,42 +320,18 @@ def build_rows_on_section(
     if not people:
         return []
 
-    people_sorted = sorted(people, key=lambda p: (p.x, p.pid))
-    rows: List[Row] = []
+    rows = assign_people_to_rows(people, section)
 
-    for person in people_sorted:
-        person.is_row_candidate = False
-        person.can_fit_in_row = False
-        person.row_index = -1
-        person.place_in_row = -1
-
-        if not rows:
-            rows.append(create_new_row(0, person))
-            continue
-
-        current_row = rows[-1]
-        candidate = is_candidate_for_row(current_row, person)
-        width_ok = can_fit_into_row(current_row, person, section) if candidate else False
-
-        person.is_row_candidate = candidate
-        person.can_fit_in_row = width_ok
-
-        if candidate and width_ok:
-            add_person_to_row(current_row, person)
-        else:
-            min_center_x = None
-            if reposition_rows:
-                min_center_x = current_row.row_right + person.c_geom / 2.0
-
-            rows.append(create_new_row(len(rows), person, min_center_x=min_center_x))
+    if reposition_rows:
+        pack_rows_tightly(rows)
 
     return rows
 
 
 def apply_row_geometry_on_section(people: List[Person], section: Segment) -> List[Row]:
     """
-    Перестраивает людей по рядам и при необходимости сдвигает задние ряды назад по x,
-    чтобы ряды не пересекались.
+    Перестраивает людей в компактный поток из рядов на участке.
+    Ряды упаковываются вплотную друг к другу по x без продольных зазоров.
     """
     return build_rows_on_section(people, section, reposition_rows=True)
 
