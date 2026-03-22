@@ -73,13 +73,54 @@ def require_matplotlib() -> None:
 
 
 def build_section_layout_simple(sections: Dict[str, Segment]) -> Dict[str, SectionVisual]:
-    section = next(iter(sections.values()))
-    return {
-        section.sid: SectionVisual(
-            start=(0.0, 4.0),
-            end=(section.length, 4.0),
-        )
+    if not sections:
+        return {}
+
+    referenced_sections = {
+        section.next_section_id
+        for section in sections.values()
+        if section.next_section_id in sections
     }
+    roots = [sid for sid in sections.keys() if sid not in referenced_sections]
+    remaining = [sid for sid in sections.keys() if sid not in roots]
+    chains: List[List[str]] = []
+    visited: set[str] = set()
+
+    def append_chain(start_sid: str) -> None:
+        chain: List[str] = []
+        sid = start_sid
+        while sid not in visited and sid in sections:
+            visited.add(sid)
+            chain.append(sid)
+            next_sid = sections[sid].next_section_id
+            if next_sid is None or next_sid not in sections:
+                break
+            sid = next_sid
+        if chain:
+            chains.append(chain)
+
+    for sid in roots:
+        append_chain(sid)
+
+    for sid in remaining:
+        append_chain(sid)
+
+    layout: Dict[str, SectionVisual] = {}
+    base_y = 4.0
+    chain_gap_y = 4.0
+
+    for chain_index, chain in enumerate(chains):
+        cursor_x = 0.0
+        y = base_y + chain_index * chain_gap_y
+        for sid in chain:
+            section = sections[sid]
+            layout[sid] = SectionVisual(
+                start=(cursor_x, y),
+                end=(cursor_x + section.length, y),
+            )
+            cursor_x += section.length
+
+    return layout
 
 
 def setup_axes(ax: plt.Axes, layout: Dict[str, SectionVisual]) -> None:
@@ -140,17 +181,18 @@ def draw_sections(ax: plt.Axes, sections: Dict[str, Segment], layout: Dict[str, 
             color="#222222",
         )
 
-        ex_x = x1 + 1.2
-        ex_y = y1
-        ax.plot(
-            [x1, ex_x],
-            [y1, ex_y],
-            linestyle="--",
-            linewidth=1.2,
-            color="#6e6e6e",
-        )
-        ax.scatter([ex_x], [ex_y], s=120, marker="*", color="#2ca02c", zorder=6)
-        ax.text(ex_x + 0.2, ex_y, "EXIT", va="center", ha="left", fontsize=10, color="#2ca02c")
+        if section.next_section_id is None:
+            ex_x = x1 + 1.2
+            ex_y = y1
+            ax.plot(
+                [x1, ex_x],
+                [y1, ex_y],
+                linestyle="--",
+                linewidth=1.2,
+                color="#6e6e6e",
+            )
+            ax.scatter([ex_x], [ex_y], s=120, marker="*", color="#2ca02c", zorder=6)
+            ax.text(ex_x + 0.2, ex_y, "EXIT", va="center", ha="left", fontsize=10, color="#2ca02c")
 
 
 def interpolate_position_on_section(section: Segment, visual: SectionVisual, local_x: float) -> Tuple[float, float]:

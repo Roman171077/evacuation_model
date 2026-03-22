@@ -462,7 +462,7 @@ class Row:
 
 # =========================================================
 # РАСЧЕТНАЯ ЧАСТЬ
-# ЭТАП 1: один человек, один участок, без плотности, без переходов
+# ЭТАП 1: свободное движение без плотности, с переходами между участками
 # =========================================================
 
 def reset_model_state(people: List[Person]) -> None:
@@ -594,10 +594,24 @@ def compute_person_speed_stage1(person: Person, section: Segment) -> float:
     return max(0.01, v_mps)
 
 
+def apply_row_geometry_on_sections(people: List[Person], sections: Dict[str, Segment]) -> None:
+    active_people_by_section: Dict[str, List[Person]] = {sid: [] for sid in sections.keys()}
+
+    for person in people:
+        if person.finished:
+            continue
+        if person.section_id in active_people_by_section:
+            active_people_by_section[person.section_id].append(person)
+
+    for sid, section_people in active_people_by_section.items():
+        if section_people:
+            apply_row_geometry_on_section(section_people, sections[sid])
+
+
 class SinglePersonSingleSegmentModel:
     def __init__(self, sections: Dict[str, Segment], people: List[Person], params: SimulationParams):
-        if len(sections) != 1:
-            raise ValueError("На этапе 1 должен быть только один участок.")
+        if not sections:
+            raise ValueError("В сценарии должен быть хотя бы один участок.")
         if not people:
             raise ValueError("В сценарии должен быть хотя бы один человек.")
 
@@ -612,49 +626,79 @@ class SinglePersonSingleSegmentModel:
     def person(self) -> Person:
         return self.people[0]
 
+    def section_by_id(self, section_id: str) -> Segment:
+        return self.sections[section_id]
+
     def all_finished(self) -> bool:
         return all(person.finished for person in self.people)
+
+    def _move_person(self, person: Person) -> None:
+        current_section = self.section_by_id(person.section_id)
+        person.v = compute_person_speed_stage1(person, current_section)
+        person.x_raw = person.x - person.v * self.params.dt
+
+        if person.v <= 0:
+            person.x = max(0.0, person.x_raw)
+            return
+
+        remaining_distance = person.v * self.params.dt
+        current_x = person.x
+        section = current_section
+
+        while True:
+            if remaining_distance < current_x:
+                person.section_id = section.sid
+                person.x = current_x - remaining_distance
+                return
+
+            distance_to_boundary = current_x
+            remaining_distance -= distance_to_boundary
+            dt_to_boundary = distance_to_boundary / person.v
+
+            if not section.next_section_id:
+                person.section_id = "EXIT"
+                person.x = 0.0
+                person.finished = True
+                person.exit_time = self.time + dt_to_boundary
+                return
+
+            next_section = self.section_by_id(section.next_section_id)
+            current_x = max(0.0, next_section.length - next_section.merge_lj)
+            person.section_id = next_section.sid
+            person.x = current_x
+            section = next_section
 
     def step(self) -> None:
         """
         Этап без плотности:
         1) свободное движение каждого человека,
-        2) затем геометрическое восстановление рядов на участке,
-           чтобы люди не проходили сквозь впереди стоящие ряды.
+        2) переходы между соседними участками,
+        3) затем геометрическое восстановление рядов на каждом участке.
         """
-        section = self.section()
-
         for person in self.people:
             if person.finished:
                 continue
+            self._move_person(person)
 
-            person.v = compute_person_speed_stage1(person, section)
+        apply_row_geometry_on_sections(self.people, self.sections)
 
-            x_prev = person.x
-            person.x_raw = x_prev - person.v * self.params.dt
-
-            if person.x_raw > 0:
-                person.x = person.x_raw
-                continue
-
-            # человек дошел до конца участка;
-            # уточняем время внутри последнего шага
-            if person.v > 0:
-                dt_to_exit = x_prev / person.v
-                dt_to_exit = min(max(dt_to_exit, 0.0), self.params.dt)
-            else:
-                dt_to_exit = self.params.dt
-
-            person.x = 0.0
-            person.finished = True
-            person.exit_time = self.time + dt_to_exit
-            person.section_id = "EXIT"
-
-        active_people = [
-            person for person in self.people
-            if not person.finished and person.section_id == section.sid
-        ]
-        apply_row_geometry_on_section(active_people, section)
+    def build_result(self) -> Dict[str, float | int | Dict[int, float | None]]:
+        total_path_length = sum(section.length for section in self.sections.values())
+        return {
+            "modeled_path_length_m": total_path_length,
+            "speed_m_per_s": max((person.v for person in self.people), default=0.0),
+            "travel_time_sec": max(
+                (
+                    person.exit_time
+                    for person in self.people
+                    if person.exit_time is not None
+                ),
+                default=self.time,
+            ),
+            "finished_count": sum(1 for person in self.people if person.finished),
+            "total_people": len(self.people),
+            "exit_times": {person.pid: person.exit_time for person in self.people},
+        }
 
     def run(self, verbose: bool = True) -> Dict[str, float | int | Dict[int, float | None]]:
         while not self.all_finished() and self.time < self.params.max_time:
@@ -674,23 +718,7 @@ class SinglePersonSingleSegmentModel:
 
             self.time += self.params.dt
 
-        section = self.section()
-
-        return {
-            "segment_length_m": section.length,
-            "speed_m_per_s": max((person.v for person in self.people), default=0.0),
-            "travel_time_sec": max(
-                (
-                    person.exit_time
-                    for person in self.people
-                    if person.exit_time is not None
-                ),
-                default=self.time,
-            ),
-            "finished_count": sum(1 for person in self.people if person.finished),
-            "total_people": len(self.people),
-            "exit_times": {person.pid: person.exit_time for person in self.people},
-        }
+        return self.build_result()
 
 
 def run_simulation(
@@ -700,10 +728,7 @@ def run_simulation(
     sections, people, params = scenario
     reset_model_state(people)
     model = SinglePersonSingleSegmentModel(sections, people, params)
-    apply_row_geometry_on_section(
-        [p for p in model.people if not p.finished and p.section_id == model.section().sid],
-        model.section(),
-    )
+    apply_row_geometry_on_sections(model.people, model.sections)
     return model.run(verbose=verbose)
 
 
@@ -748,10 +773,7 @@ def run_simulation_with_history(
     reset_model_state(people)
 
     model = SinglePersonSingleSegmentModel(sections, people, params)
-    apply_row_geometry_on_section(
-        [p for p in model.people if not p.finished and p.section_id == model.section().sid],
-        model.section(),
-    )
+    apply_row_geometry_on_sections(model.people, model.sections)
     history: List[Snapshot] = [build_snapshot(model, 0.0)]
 
     next_snapshot_time = snapshot_interval
@@ -776,21 +798,7 @@ def run_simulation_with_history(
                 else f"t = {model.time:.1f} c | все эвакуированы"
             )
 
-    result = {
-        "segment_length_m": model.section().length,
-        "speed_m_per_s": max((person.v for person in model.people), default=0.0),
-        "travel_time_sec": max(
-            (
-                person.exit_time
-                for person in model.people
-                if person.exit_time is not None
-            ),
-            default=model.time,
-        ),
-        "finished_count": sum(1 for person in model.people if person.finished),
-        "total_people": len(model.people),
-        "exit_times": {person.pid: person.exit_time for person in model.people},
-    }
+    result = model.build_result()
 
     if not history or history[-1].time < model.time - 1e-9:
         history.append(build_snapshot(model, round(model.time, 3)))

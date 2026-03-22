@@ -49,7 +49,7 @@ ROWS_DEMO_PERSON_SPECS: tuple[dict[str, object], ...] = (
 )
 
 
-ROWS_DEMO_PARAMS = SimulationParams(dt=0.1, max_time=60.0)
+ROWS_DEMO_PARAMS = SimulationParams(dt=0.1, max_time=120.0)
 
 
 def build_rows_demo_case() -> tuple[dict[str, Segment], list[Person], SimulationParams]:
@@ -77,21 +77,27 @@ def build_people_summary_lines(people: Iterable[Person]) -> list[str]:
 
 
 def print_input_data_summary(sections: Mapping[str, Segment], people: list[Person]) -> None:
-    section = next(iter(sections.values()))
+    first_section = next(iter(sections.values()))
 
     print('\nВВОДНЫЕ ДАННЫЕ:')
-    print('Характеристика участка:')
-    print(f'Участок: {section.sid}')
-    print(f'Тип участка: {section.section_type}')
-    print(f'Длина участка: {section.length:.2f} м')
-    print(f'Ширина участка для рядов: {section.width:.2f} м')
-    print(f'Ширина выхода: {section.exit_width:.2f} м')
+    print('Характеристика участков:')
+    for section in sections.values():
+        print(f'Участок: {section.sid}')
+        print(f'Тип участка: {section.section_type}')
+        print(f'Длина участка: {section.length:.2f} м')
+        print(f'Ширина участка для рядов: {section.width:.2f} м')
+        print(f'Ширина выхода: {section.exit_width:.2f} м')
+        print(f'Следующий участок: {section.next_section_id or "EXIT"}')
+        if section.merge_lj > 0:
+            print(f'Координата места слияния: {section.merge_lj:.2f} м')
+        print('---')
 
     print('Характеристика людей:')
     print(f'Всего людей: {len(people)}')
     for line in build_people_summary_lines(people):
         print(line)
 
-    print('Формирование рядов по текущим вводным:')
-    for line in format_rows_debug(people, section):
+    print('Формирование рядов на стартовом участке по текущим вводным:')
+    starting_people = [person for person in people if person.section_id == first_section.sid]
+    for line in format_rows_debug(starting_people, first_section):
         print(line)
