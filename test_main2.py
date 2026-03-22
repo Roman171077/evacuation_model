@@ -5,6 +5,9 @@ from main2 import (
     Segment,
     PersonState,
     Snapshot,
+    SimulationParams,
+    SinglePersonSingleSegmentModel,
+    apply_row_geometry_on_section,
     build_rows_on_section,
     compute_snapshot_visual_placements,
 )
@@ -43,6 +46,41 @@ class Main2RowBuildingTests(unittest.TestCase):
         self.assertTrue(people[1].is_row_candidate)
         self.assertFalse(people[1].can_fit_in_row)
         self.assertEqual(people[1].row_index, 1)
+
+    def test_apply_row_geometry_moves_new_rows_back_along_x(self):
+        section = Segment("horizontal_1", "horizontal", length=12.0, width=1.0, exit_width=1.0)
+        people = [
+            Person(pid=1, group="M4_WHEELCHAIR", section_id="horizontal_1", x=5.00),
+            Person(pid=2, group="M4_WHEELCHAIR", section_id="horizontal_1", x=5.00),
+            Person(pid=3, group="M0_3", section_id="horizontal_1", x=5.00),
+        ]
+
+        rows = apply_row_geometry_on_section(people, section)
+
+        self.assertEqual(len(rows), 3)
+        self.assertAlmostEqual(people[0].x, 5.00)
+        self.assertAlmostEqual(people[1].x, 6.20)
+        self.assertAlmostEqual(people[2].x, 7.03)
+
+    def test_step_prevents_back_row_from_passing_front_row(self):
+        section = Segment("horizontal_1", "horizontal", length=12.0, width=1.0, exit_width=1.0)
+        people = [
+            Person(pid=1, group="M4_WHEELCHAIR", section_id="horizontal_1", x=5.00),
+            Person(pid=2, group="M0_3", section_id="horizontal_1", x=5.20),
+        ]
+        params = SimulationParams(dt=2.0, max_time=10.0)
+        model = SinglePersonSingleSegmentModel({"horizontal_1": section}, people, params)
+
+        apply_row_geometry_on_section(model.people, section)
+        model.step()
+
+        front_person = min(people, key=lambda person: person.x)
+        back_person = max(people, key=lambda person: person.x)
+
+        self.assertGreaterEqual(
+            back_person.x - back_person.c_geom / 2.0,
+            front_person.x + front_person.c_geom / 2.0 - 1e-9,
+        )
 
     def test_visual_placements_keep_people_of_same_row_on_same_x_band(self):
         section = Segment("horizontal_1", "horizontal", length=12.0, width=2.0, exit_width=1.2)
