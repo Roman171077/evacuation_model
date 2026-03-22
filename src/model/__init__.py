@@ -1,5 +1,21 @@
-from src.model.person import Person
-from src.model.segment import Segment
-from src.model.simulation_params import SimulationParams
+from src.model.entities import (
+    Person,
+    PersonState,
+    PersonVisualPlacement,
+    Row,
+    SectionVisual,
+    Segment,
+    SimulationParams,
+    Snapshot,
+)
 
-__all__ = ["Person", "Segment", "SimulationParams"]
+__all__ = [
+    "Person",
+    "PersonState",
+    "PersonVisualPlacement",
+    "Row",
+    "SectionVisual",
+    "Segment",
+    "SimulationParams",
+    "Snapshot",
+]

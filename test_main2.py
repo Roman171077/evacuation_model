@@ -82,6 +82,37 @@ class Main2RowBuildingTests(unittest.TestCase):
             front_person.x + front_person.c_geom / 2.0 - 1e-9,
         )
 
+    def test_same_row_does_not_let_faster_people_overtake_wheelchair(self):
+        section = Segment("horizontal_1", "horizontal", length=50.0, width=2.0, exit_width=1.2)
+        people = [
+            Person(pid=1, group="M4_WHEELCHAIR", section_id="horizontal_1", x=40.00),
+            Person(pid=2, group="M0_3", section_id="horizontal_1", x=45.00),
+            Person(pid=3, group="M0_3", section_id="horizontal_1", x=45.50),
+            Person(pid=4, group="M0_3", section_id="horizontal_1", x=46.00),
+            Person(pid=5, group="M0_3", section_id="horizontal_1", x=48.00),
+            Person(pid=6, group="M0_3", section_id="horizontal_1", x=46.50),
+            Person(pid=7, group="M0_3", section_id="horizontal_1", x=47.00),
+            Person(pid=8, group="M0_3", section_id="horizontal_1", x=47.50),
+            Person(pid=9, group="M0_3", section_id="horizontal_1", x=48.00),
+            Person(pid=10, group="M0_3", section_id="horizontal_1", x=48.50),
+            Person(pid=11, group="M0_3", section_id="horizontal_1", x=49.00),
+            Person(pid=12, group="M0_3", section_id="horizontal_1", x=49.70),
+        ]
+        params = SimulationParams(dt=0.1, max_time=60.0)
+        model = SinglePersonSingleSegmentModel({"horizontal_1": section}, people, params)
+
+        apply_row_geometry_on_section(model.people, section)
+        for _ in range(150):
+            model.step()
+            model.time += model.params.dt
+
+            wheelchair = next(person for person in people if person.pid == 1)
+            active_people = [person for person in people if not person.finished and person.pid != 1]
+            self.assertFalse(
+                any(person.x < wheelchair.x - 1e-9 for person in active_people),
+                "Более быстрые M0_3 не должны обгонять кресло-коляску по координате x.",
+            )
+
     def test_visual_placements_keep_people_of_same_row_on_same_x_band(self):
         section = Segment("horizontal_1", "horizontal", length=12.0, width=2.0, exit_width=1.2)
         snapshot = Snapshot(
