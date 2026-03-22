@@ -1213,8 +1213,19 @@ def animate_evacuation(
 def can_render_realtime() -> bool:
     if not HAS_MATPLOTLIB or matplotlib is None:
         return False
+
     backend = matplotlib.get_backend().lower()
-    return "agg" not in backend
+    non_interactive_backends = {
+        "agg",
+        "pdf",
+        "ps",
+        "svg",
+        "pgf",
+        "cairo",
+        "template",
+        "module://matplotlib_inline.backend_inline",
+    }
+    return backend not in non_interactive_backends
 
 
 def show_realtime_evacuation(
