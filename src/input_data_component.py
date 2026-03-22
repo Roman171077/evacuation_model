@@ -17,14 +17,14 @@ ROWS_DEMO_SECTION_SPECS: tuple[dict[str, object], ...] = (
     {
         'sid': 'horizontal_1',
         'section_type': 'horizontal',
-        'length': 50.0,
+        'length': 25.0,
         'width': 2.0,
         'next_section_id': 'horizontal_2',
     },
     {
         'sid': 'horizontal_2',
         'section_type': 'horizontal',
-        'length': 50.0,
+        'length': 25.0,
         'width': 2.0,
         'next_section_id': None,
     },
@@ -32,18 +32,18 @@ ROWS_DEMO_SECTION_SPECS: tuple[dict[str, object], ...] = (
 
 
 ROWS_DEMO_PERSON_SPECS: tuple[dict[str, object], ...] = (
-    {'pid': 1, 'group': 'M4_WHEELCHAIR', 'section_id': 'horizontal_1', 'x': 40.00},
-    {'pid': 2, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 45.00},
-    {'pid': 3, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 45.50},
-    {'pid': 4, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 46.00},
-    {'pid': 5, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 46.00},
-    {'pid': 6, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 46.50},
-    {'pid': 7, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 47.00},
-    {'pid': 8, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 47.50},
-    {'pid': 9, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 48.00},
-    {'pid': 10, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 48.50},
-    {'pid': 11, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 49.00},
-    {'pid': 12, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 49.70},
+    {'pid': 1, 'group': 'M4_WHEELCHAIR', 'section_id': 'horizontal_1', 'x': 18.00},
+    {'pid': 2, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 24.00},
+    {'pid': 3, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 24.50},
+    {'pid': 4, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 24.00},
+    {'pid': 5, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 23.00},
+    {'pid': 6, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 23.50},
+    {'pid': 7, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 22.00},
+    {'pid': 8, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 22.50},
+    {'pid': 9, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 21.00},
+    {'pid': 10, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 21.50},
+    {'pid': 11, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 20.00},
+    {'pid': 12, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 20.70},
 )
 
 
