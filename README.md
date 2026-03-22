@@ -15,7 +15,7 @@
 - `src/simulation/simulation.py` — ядро `EvacuationModel` (`step`, `run`).
 - `scenarios/` — сценарии, возвращающие `(sections, people, params)`.
 - `main.py` — основной entrypoint CLI, orchestration расчета и визуализации.
-- `src/input_data_component.py` — отдельный компонент вывода вводных данных, характеристик участка и людей.
+- `src/input_data_component.py` — отдельный компонент со вводными данными demo-сценария (характеристики участка, список людей, параметры расчета) и их печатной сводкой.
 - `src/rows_model.py` — расчетная часть формирования рядов, истории состояний и сценарии.
 - `src/visualization.py` — отдельный компонент визуализации на matplotlib.
 
