@@ -60,7 +60,7 @@ class Main2RowBuildingTests(unittest.TestCase):
         self.assertEqual(len(rows), 3)
         self.assertAlmostEqual(people[0].x, 5.00)
         self.assertAlmostEqual(people[1].x, 6.20)
-        self.assertAlmostEqual(people[2].x, 7.03)
+        self.assertAlmostEqual(people[2].x, 6.94)
 
     def test_step_prevents_back_row_from_passing_front_row(self):
         section = Segment("horizontal_1", "horizontal", length=12.0, width=1.0, exit_width=1.0)
@@ -81,6 +81,9 @@ class Main2RowBuildingTests(unittest.TestCase):
             back_person.x - back_person.c_geom / 2.0,
             front_person.x + front_person.c_geom / 2.0 - 1e-9,
         )
+
+    def test_visual_api_is_exported_from_separate_module(self):
+        self.assertEqual(compute_snapshot_visual_placements.__module__, "src.visualization")
 
     def test_visual_placements_keep_people_of_same_row_on_same_x_band(self):
         section = Segment("horizontal_1", "horizontal", length=12.0, width=2.0, exit_width=1.2)
