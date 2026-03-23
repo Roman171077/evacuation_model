@@ -53,7 +53,7 @@ class MainRowBuildingTests(unittest.TestCase):
         self.assertFalse(people[1].can_fit_in_row)
         self.assertEqual(people[1].row_index, 1)
 
-    def test_apply_row_geometry_keeps_physical_x_and_stores_row_shifts(self):
+    def test_apply_row_geometry_shifts_overflow_rows_backward_by_row_step(self):
         section = Segment("horizontal_1", "horizontal", length=12.0, width=1.0)
         people = [
             Person(pid=1, group="M4_WHEELCHAIR", section_id="horizontal_1", x=5.00),
@@ -65,11 +65,11 @@ class MainRowBuildingTests(unittest.TestCase):
 
         self.assertEqual(len(rows), 3)
         self.assertAlmostEqual(people[0].x, 5.00)
-        self.assertAlmostEqual(people[1].x, 5.00)
-        self.assertAlmostEqual(people[2].x, 5.00)
+        self.assertAlmostEqual(people[1].x, 5.25)
+        self.assertAlmostEqual(people[2].x, 5.50)
         self.assertEqual(rows[0].longitudinal_shift, 0.0)
-        self.assertGreater(rows[1].longitudinal_shift, 0.0)
-        self.assertGreater(rows[2].longitudinal_shift, rows[1].longitudinal_shift)
+        self.assertAlmostEqual(rows[1].longitudinal_shift, 0.25)
+        self.assertAlmostEqual(rows[2].longitudinal_shift, 0.50)
 
     def test_build_rows_keeps_multiple_people_with_same_x_in_back_row(self):
         section = Segment("horizontal_1", "horizontal", length=12.0, width=2.0)
@@ -283,7 +283,7 @@ class MainRowBuildingTests(unittest.TestCase):
         self.assertEqual(people[1].other_flow_people_ids, [])
         self.assertGreater(people[0].x, people[1].x)
 
-    def test_flow_breaks_on_next_step_when_row_gap_exceeds_threshold(self):
+    def test_same_coordinate_rows_keep_flow_when_shift_step_stays_within_threshold(self):
         section = Segment("horizontal_1", "horizontal", length=12.0, width=1.0)
         people = [
             Person(pid=1, group="M4_WHEELCHAIR", section_id="horizontal_1", x=8.0),
@@ -296,16 +296,18 @@ class MainRowBuildingTests(unittest.TestCase):
         update_rows_and_flows_on_sections(model.people, model.sections)
         self.assertEqual(people[1].flow_index, 0)
         self.assertEqual(people[1].other_flow_people_ids, [1, 3])
+        self.assertAlmostEqual(people[1].x - people[0].x, 0.25)
+        self.assertAlmostEqual(people[2].x - people[1].x, 0.25)
 
         model.step()
 
-        self.assertFalse(people[1].is_in_flow)
-        self.assertEqual(people[1].flow_index, -1)
-        self.assertEqual(people[1].other_flow_people_ids, [])
+        self.assertTrue(people[1].is_in_flow)
+        self.assertEqual(people[1].flow_index, 0)
+        self.assertEqual(people[1].other_flow_people_ids, [1, 3])
         self.assertTrue(people[0].is_in_flow)
         self.assertTrue(people[2].is_in_flow)
-        self.assertEqual(people[0].other_flow_people_ids, [3])
-        self.assertEqual(people[2].other_flow_people_ids, [1])
+        self.assertEqual(people[0].other_flow_people_ids, [2, 3])
+        self.assertEqual(people[2].other_flow_people_ids, [2, 1])
 
     def test_rows_merge_into_flow_on_next_step(self):
         section = Segment("horizontal_1", "horizontal", length=12.0, width=1.0)

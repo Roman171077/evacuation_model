@@ -565,19 +565,24 @@ def create_new_row(row_index: int, person: Person) -> Row:
 
 
 def apply_longitudinal_row_offsets(rows: List[Row]) -> None:
-    previous_row_right: Optional[float] = None
+    previous_row_mean_x: Optional[float] = None
 
     for row in rows:
-        original_left = min(person.x - person.c_geom / 2.0 for person in row.people)
-        original_right = max(person.x + person.c_geom / 2.0 for person in row.people)
+        original_mean_x = get_row_mean_x(row)
+        target_mean_x = original_mean_x
 
-        row.longitudinal_shift = 0.0
-        if previous_row_right is not None:
-            row.longitudinal_shift = max(0.0, previous_row_right - original_left)
+        if previous_row_mean_x is not None:
+            target_mean_x = max(original_mean_x, previous_row_mean_x + ROW_STEP_X)
 
-        row.row_left = original_left + row.longitudinal_shift
-        row.row_right = original_right + row.longitudinal_shift
-        previous_row_right = row.row_right
+        row.longitudinal_shift = target_mean_x - original_mean_x
+
+        if row.longitudinal_shift > 0.0:
+            for person in row.people:
+                person.x += row.longitudinal_shift
+
+        row.row_left = min(person.x - person.c_geom / 2.0 for person in row.people)
+        row.row_right = max(person.x + person.c_geom / 2.0 for person in row.people)
+        previous_row_mean_x = get_row_mean_x(row)
 
 
 def build_rows_on_section(
@@ -618,8 +623,8 @@ def build_rows_on_section(
 
 def apply_row_geometry_on_section(people: List[Person], section: Segment) -> List[Row]:
     """
-    Перестраивает людей по рядам и рассчитывает служебные продольные сдвиги рядов
-    без изменения физической координаты person.x.
+    Перестраивает людей по рядам и, если новый ряд появился из-за нехватки ширины,
+    сдвигает его назад по x с шагом ROW_STEP_X.
     """
     return build_rows_on_section(people, section, reposition_rows=True)
 
