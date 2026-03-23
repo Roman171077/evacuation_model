@@ -233,6 +233,7 @@ def compute_snapshot_visual_placements(
 ) -> List[PersonVisualPlacement]:
     placements: List[PersonVisualPlacement] = []
     section_people: Dict[str, List[Person]] = {sid: [] for sid in sections.keys()}
+    snapshot_state_by_pid = {person_state.pid: person_state for person_state in snapshot.people}
 
     for person_state in snapshot.people:
         if person_state.finished or person_state.section_id == "EXIT":
@@ -261,6 +262,9 @@ def compute_snapshot_visual_placements(
                 px, py = interpolate_position_on_section(section, visual, person.x)
                 lateral_offset = centers[person.pid]
                 center = (px + nx * lateral_offset, py + ny * lateral_offset)
+                person_state = snapshot_state_by_pid.get(person.pid)
+                row_index = person.row_index if person_state is None else person_state.row_index
+                place_in_row = person.place_in_row if person_state is None else person_state.place_in_row
                 placements.append(
                     PersonVisualPlacement(
                         pid=person.pid,
@@ -269,9 +273,9 @@ def compute_snapshot_visual_placements(
                         length_m=person.c_geom,
                         width_m=person.a_geom,
                         color=get_profile_color(person.group),
-                        label=f"{person.pid}\nR{person.row_index}:{person.place_in_row}",
-                        row_index=person.row_index,
-                        place_in_row=person.place_in_row,
+                        label=f"{person.pid}\nR{row_index}:{place_in_row}",
+                        row_index=row_index,
+                        place_in_row=place_in_row,
                     )
                 )
 
