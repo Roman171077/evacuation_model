@@ -1,5 +1,6 @@
 import unittest
 
+from src.visualization import build_flow_summary_lines
 from main import (
     Person,
     PersonState,
@@ -195,6 +196,74 @@ class MainRowBuildingTests(unittest.TestCase):
             self.assertEqual(person.flow_index, -1)
             self.assertEqual(person.flow_delta_x, 0.0)
             self.assertEqual(person.other_flow_people_ids, [])
+
+    def test_flow_summary_lines_list_people_in_each_flow(self):
+        section = Segment("horizontal_1", "horizontal", length=12.0, width=1.0)
+        people = [
+            Person(pid=1, group="M4_WHEELCHAIR", section_id="horizontal_1", x=5.00),
+            Person(pid=2, group="M4_WHEELCHAIR", section_id="horizontal_1", x=5.00),
+            Person(pid=3, group="M4_WHEELCHAIR", section_id="horizontal_1", x=5.00),
+        ]
+
+        update_people_position_state_on_sections(people, {"horizontal_1": section})
+        snapshot = Snapshot(
+            time=0.0,
+            people=[
+                PersonState(
+                    pid=person.pid,
+                    group=person.group,
+                    section_id=person.section_id,
+                    x=person.x,
+                    flow_index=person.flow_index,
+                    place_in_flow=person.place_in_flow,
+                    finished=person.finished,
+                )
+                for person in people
+            ],
+            section_counts={"horizontal_1": 3},
+            finished_count=0,
+            total_people=3,
+        )
+
+        self.assertEqual(
+            build_flow_summary_lines(snapshot, {"horizontal_1": section}),
+            ["Потоки по участкам:", "horizontal_1:", "  F0: 1, 2, 3"],
+        )
+
+    def test_flow_summary_lines_show_dash_when_section_has_no_flow(self):
+        sections = {
+            "horizontal_1": Segment("horizontal_1", "horizontal", length=12.0, width=2.0),
+            "horizontal_2": Segment("horizontal_2", "horizontal", length=10.0, width=2.0),
+        }
+        people = [
+            Person(pid=1, group="M0_3", section_id="horizontal_1", x=5.00),
+            Person(pid=2, group="M0_3", section_id="horizontal_1", x=5.05),
+        ]
+
+        update_people_position_state_on_sections(people, sections)
+        snapshot = Snapshot(
+            time=0.0,
+            people=[
+                PersonState(
+                    pid=person.pid,
+                    group=person.group,
+                    section_id=person.section_id,
+                    x=person.x,
+                    flow_index=person.flow_index,
+                    place_in_flow=person.place_in_flow,
+                    finished=person.finished,
+                )
+                for person in people
+            ],
+            section_counts={"horizontal_1": 2, "horizontal_2": 0},
+            finished_count=0,
+            total_people=2,
+        )
+
+        self.assertEqual(
+            build_flow_summary_lines(snapshot, sections),
+            ["Потоки по участкам:", "horizontal_1: —", "horizontal_2: —"],
+        )
 
     def test_position_state_for_consecutive_rows_forming_flow(self):
         section = Segment("horizontal_1", "horizontal", length=12.0, width=1.0)

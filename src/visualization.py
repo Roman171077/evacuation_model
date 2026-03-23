@@ -316,6 +316,45 @@ def draw_people(ax: plt.Axes, snapshot: Snapshot, sections: Dict[str, Segment], 
         )
 
 
+def build_flow_summary_lines(snapshot: Snapshot, sections: Dict[str, Segment]) -> List[str]:
+    flow_members_by_section: Dict[str, Dict[int, List[Tuple[int, int]]]] = {
+        sid: {} for sid in sections.keys()
+    }
+
+    for person in snapshot.people:
+        if person.finished or person.section_id == "EXIT":
+            continue
+        if person.section_id not in flow_members_by_section:
+            continue
+        if person.flow_index < 0:
+            continue
+
+        section_flows = flow_members_by_section[person.section_id]
+        section_flows.setdefault(person.flow_index, []).append((person.place_in_flow, person.pid))
+
+    lines = ["Потоки по участкам:"]
+
+    for sid in sections.keys():
+        section_flows = flow_members_by_section[sid]
+        if not section_flows:
+            lines.append(f"{sid}: —")
+            continue
+
+        lines.append(f"{sid}:")
+        for flow_index in sorted(section_flows.keys()):
+            ordered_people = [
+                pid
+                for _place, pid in sorted(
+                    section_flows[flow_index],
+                    key=lambda item: (item[0], item[1]),
+                )
+            ]
+            flow_members = ", ".join(str(pid) for pid in ordered_people)
+            lines.append(f"  F{flow_index}: {flow_members}")
+
+    return lines
+
+
 def draw_status_box(ax: plt.Axes, snapshot: Snapshot, sections: Dict[str, Segment]) -> None:
     require_matplotlib()
     active_count = snapshot.total_people - snapshot.finished_count
@@ -341,6 +380,25 @@ def draw_status_box(ax: plt.Axes, snapshot: Snapshot, sections: Dict[str, Segmen
         ha="left",
         va="top",
         fontsize=9,
+        family="monospace",
+        bbox=dict(boxstyle="round", facecolor="white", edgecolor="#999999", alpha=0.92),
+        zorder=20,
+    )
+
+
+def draw_flow_box(ax: plt.Axes, snapshot: Snapshot, sections: Dict[str, Segment]) -> None:
+    require_matplotlib()
+    lines = build_flow_summary_lines(snapshot, sections)
+    text = "\n".join(lines)
+
+    ax.text(
+        0.73,
+        0.98,
+        text,
+        transform=ax.transAxes,
+        ha="left",
+        va="top",
+        fontsize=8,
         family="monospace",
         bbox=dict(boxstyle="round", facecolor="white", edgecolor="#999999", alpha=0.92),
         zorder=20,
@@ -377,6 +435,7 @@ def render_snapshot(
     draw_sections(ax, sections, layout)
     draw_people(ax, snapshot, sections, layout)
     draw_status_box(ax, snapshot, sections)
+    draw_flow_box(ax, snapshot, sections)
     draw_group_legend(ax)
     ax.set_title("Геометрическое формирование рядов на участке", fontsize=12)
 
