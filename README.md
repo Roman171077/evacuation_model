@@ -43,6 +43,7 @@
 python main.py
 python main.py --mode realtime
 python main.py --mode replay
+streamlit run src/replay_app.py
 ```
 
 Для `main.py` на Windows принудительно выбирается интерактивный backend `TkAgg`, а в headless Linux/macOS без `DISPLAY`/`WAYLAND_DISPLAY` используется `Agg`, поэтому при старте выводится активный backend matplotlib.
@@ -51,6 +52,26 @@ python main.py --mode replay
 - шаг назад/вперед;
 - пуск/пауза;
 - переход на любой шаг ползунком.
+
+Дополнительно при каждом запуске `main.py` сохраняется `artifacts/history.json` с полной историей шагов:
+- `step`, `time`;
+- массив `agents` (позиции, ряды, потоки, состояние);
+- агрегированные метрики шага (`finished_count`, `remaining_count`, `section_counts`).
+
+## Replay-визуализация (Streamlit)
+
+Для headless-окружений (например, Codespaces) используйте браузерный replay:
+
+```bash
+streamlit run src/replay_app.py
+```
+
+Что доступно в приложении:
+- кнопки `◀ Шаг назад`, `Шаг вперед ▶`, `▶ Пуск / ⏸ Пауза`;
+- ползунок перехода к произвольному шагу `0..N-1`;
+- автоостановка на последнем шаге;
+- метрики текущего шага (время модели, эвакуировано, осталось);
+- отображение числа людей по участкам.
 
 ## Минимальный сценарий
 
