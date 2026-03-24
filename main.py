@@ -44,6 +44,7 @@ from src.visualization import (
     build_section_layout_simple,
     can_render_realtime,
     compute_snapshot_visual_placements,
+    export_step_replay_html,
     matplotlib,
     plot_snapshot_at_time,
     plt,
@@ -77,6 +78,7 @@ __all__ = [
     'compute_person_row_centers',
     'compute_person_speed_stage1',
     'compute_snapshot_visual_placements',
+    'export_step_replay_html',
     'format_rows_debug',
     'get_profile',
     'get_profile_area',
@@ -107,9 +109,9 @@ def parse_cli_args() -> argparse.Namespace:
     )
     parser.add_argument(
         '--mode',
-        choices=('realtime', 'snapshot'),
+        choices=('realtime', 'snapshot', 'replay'),
         default='realtime',
-        help='realtime — анимация по истории, snapshot — сохранить один статический кадр.',
+        help='realtime — анимация, snapshot — один кадр, replay — html-плеер по шагам.',
     )
     parser.add_argument(
         '--playback-speed',
@@ -154,6 +156,14 @@ def main() -> None:
                 layout,
                 playback_speed=args.playback_speed,
             )
+        elif args.mode == 'replay':
+            output_path = export_step_replay_html(
+                history=history,
+                sections=sections,
+                layout=layout,
+            )
+            print(f'Покадровый replay сохранен: {output_path}')
+            print('Открой файл в браузере: доступны шаг назад/вперед, пауза и ползунок.')
         else:
             if args.mode == 'realtime' and not can_render_realtime():
                 print(
