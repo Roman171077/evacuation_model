@@ -264,7 +264,7 @@ def compute_snapshot_visual_placements(
         section = sections[sid]
         visual = layout[sid]
         nx, ny = perpendicular_unit_vector(visual)
-        rows = build_rows_on_section(people, section)
+        rows = build_rows_on_section(people, section, reposition_rows=True)
 
         for row in rows:
             centers = compute_person_row_centers(row, section)

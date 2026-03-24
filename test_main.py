@@ -65,7 +65,7 @@ class MainRowBuildingTests(unittest.TestCase):
         self.assertFalse(people[1].can_fit_in_row)
         self.assertEqual(people[1].row_index, 1)
 
-    def test_apply_row_geometry_shifts_overflow_rows_backward_by_row_step(self):
+    def test_apply_row_geometry_shifts_new_rows_from_previous_row_right_boundary(self):
         section = Segment("horizontal_1", "horizontal", length=12.0, width=1.0)
         people = [
             Person(pid=1, group="M4_WHEELCHAIR", section_id="horizontal_1", x=5.00),
@@ -77,11 +77,29 @@ class MainRowBuildingTests(unittest.TestCase):
 
         self.assertEqual(len(rows), 3)
         self.assertAlmostEqual(people[0].x, 5.00)
-        self.assertAlmostEqual(people[1].x, 5.25)
-        self.assertAlmostEqual(people[2].x, 5.50)
+        self.assertAlmostEqual(people[1].x, 6.45, places=2)
+        self.assertAlmostEqual(people[2].x, 7.44, places=2)
         self.assertEqual(rows[0].longitudinal_shift, 0.0)
-        self.assertAlmostEqual(rows[1].longitudinal_shift, 0.25)
-        self.assertAlmostEqual(rows[2].longitudinal_shift, 0.50)
+        self.assertAlmostEqual(rows[1].longitudinal_shift, 1.45, places=2)
+        self.assertAlmostEqual(rows[2].longitudinal_shift, 2.44, places=2)
+
+        for front_row, back_row in zip(rows, rows[1:]):
+            self.assertGreaterEqual(back_row.row_left, front_row.row_right + 0.25 - 1e-9)
+
+    def test_apply_row_geometry_avoids_overlap_for_mixed_c_geom(self):
+        section = Segment("horizontal_1", "horizontal", length=12.0, width=1.2)
+        people = [
+            Person(pid=1, group="M4_WHEELCHAIR", section_id="horizontal_1", x=5.00),
+            Person(pid=2, group="M0_3", section_id="horizontal_1", x=5.02),
+            Person(pid=3, group="M0_3", section_id="horizontal_1", x=5.04),
+            Person(pid=4, group="M4_WHEELCHAIR", section_id="horizontal_1", x=5.06),
+        ]
+
+        rows = apply_row_geometry_on_section(people, section)
+
+        self.assertGreaterEqual(len(rows), 2)
+        for front_row, back_row in zip(rows, rows[1:]):
+            self.assertGreaterEqual(back_row.row_left, front_row.row_right + 0.25 - 1e-9)
 
     def test_build_rows_keeps_multiple_people_with_same_x_in_back_row(self):
         section = Segment("horizontal_1", "horizontal", length=12.0, width=2.0)
@@ -353,14 +371,14 @@ class MainRowBuildingTests(unittest.TestCase):
         self.assertEqual(people[1].section_id, "horizontal_2")
         self.assertEqual(people[1].row_index, 0)
         self.assertEqual(people[0].row_index, 1)
-        self.assertFalse(people[0].is_in_flow)
-        self.assertFalse(people[1].is_in_flow)
-        self.assertEqual(people[0].flow_index, -1)
-        self.assertEqual(people[1].flow_index, -1)
-        self.assertEqual(people[0].flow_member_count, 0)
-        self.assertEqual(people[1].flow_member_count, 0)
-        self.assertEqual(people[0].other_flow_people_ids, [])
-        self.assertEqual(people[1].other_flow_people_ids, [])
+        self.assertTrue(people[0].is_in_flow)
+        self.assertTrue(people[1].is_in_flow)
+        self.assertEqual(people[0].flow_index, 0)
+        self.assertEqual(people[1].flow_index, 0)
+        self.assertEqual(people[0].flow_member_count, 2)
+        self.assertEqual(people[1].flow_member_count, 2)
+        self.assertEqual(people[0].other_flow_people_ids, [2])
+        self.assertEqual(people[1].other_flow_people_ids, [1])
         self.assertGreater(people[0].x, people[1].x)
 
     def test_same_coordinate_rows_keep_flow_when_shift_step_stays_within_threshold(self):
@@ -376,8 +394,10 @@ class MainRowBuildingTests(unittest.TestCase):
         update_rows_and_flows_on_sections(model.people, model.sections)
         self.assertEqual(people[1].flow_index, 0)
         self.assertEqual(people[1].other_flow_people_ids, [1, 3])
-        self.assertAlmostEqual(people[1].x - people[0].x, 0.25)
-        self.assertAlmostEqual(people[2].x - people[1].x, 0.25)
+        gap_01 = (people[1].x - people[1].c_geom / 2.0) - (people[0].x + people[0].c_geom / 2.0)
+        gap_12 = (people[2].x - people[2].c_geom / 2.0) - (people[1].x + people[1].c_geom / 2.0)
+        self.assertAlmostEqual(gap_01, 0.25)
+        self.assertAlmostEqual(gap_12, 0.25)
 
         model.step()
 
@@ -387,7 +407,7 @@ class MainRowBuildingTests(unittest.TestCase):
         self.assertTrue(people[0].is_in_flow)
         self.assertTrue(people[2].is_in_flow)
         self.assertEqual(people[0].other_flow_people_ids, [2, 3])
-        self.assertEqual(people[2].other_flow_people_ids, [2, 1])
+        self.assertEqual(people[2].other_flow_people_ids, [1, 2])
 
     def test_rows_merge_into_flow_on_next_step(self):
         section = Segment("horizontal_1", "horizontal", length=12.0, width=1.0)
@@ -399,8 +419,8 @@ class MainRowBuildingTests(unittest.TestCase):
         model = SinglePersonSingleSegmentModel({"horizontal_1": section}, people, params)
 
         update_rows_and_flows_on_sections(model.people, model.sections)
-        self.assertEqual(people[0].flow_index, -1)
-        self.assertEqual(people[1].flow_index, -1)
+        self.assertEqual(people[0].flow_index, 0)
+        self.assertEqual(people[1].flow_index, 0)
 
         model.step()
 
