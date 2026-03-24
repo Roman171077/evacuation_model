@@ -42,9 +42,17 @@
 ```bash
 python main.py
 python main.py --mode realtime
+python main.py --mode replay
 ```
 
 Для `main.py` на Windows принудительно выбирается интерактивный backend `TkAgg`, а в headless Linux/macOS без `DISPLAY`/`WAYLAND_DISPLAY` используется `Agg`, поэтому при старте выводится активный backend matplotlib.
+
+Режим `--mode replay` формирует автономный файл `artifacts/rows_replay.html` с покадровым управлением:
+- шаг назад/вперед;
+- пуск/пауза;
+- переход на любой шаг ползунком.
+
+Если выбран `--mode realtime`, но backend неинтерактивный (например, `Agg`), приложение автоматически делает fallback в `rows_replay.html`, а не в одиночный PNG-кадр.
 
 ## Минимальный сценарий
 

@@ -1,5 +1,8 @@
 import unittest
+from argparse import Namespace
+from unittest.mock import patch
 
+import main as main_module
 from src.visualization import build_flow_summary_lines
 from main import (
     Person,
@@ -14,6 +17,7 @@ from main import (
     build_rows_on_section,
     build_section_layout_simple,
     compute_snapshot_visual_placements,
+    parse_cli_args,
     run_simulation_with_history,
     update_people_position_state_on_sections,
     update_rows_and_flows_on_sections,
@@ -21,6 +25,31 @@ from main import (
 
 
 class MainRowBuildingTests(unittest.TestCase):
+    def test_parse_cli_args_accepts_replay_mode(self):
+        with patch("sys.argv", ["main.py", "--mode", "replay"]):
+            args = parse_cli_args()
+        self.assertEqual(args.mode, "replay")
+
+    def test_main_fallbacks_to_replay_when_backend_is_non_interactive(self):
+        sections = {"s1": Segment("s1", "horizontal", length=5.0, width=1.2, next_section_id="EXIT")}
+        people = []
+        params = SimulationParams(dt=0.1, max_time=1.0)
+        history = [Snapshot(time=0.0, people=[], section_counts={"s1": 0}, finished_count=0, total_people=0)]
+        result = {"travel_time_sec": 0.0, "finished_count": 0, "total_people": 0}
+
+        with patch.object(main_module, "parse_cli_args", return_value=Namespace(mode="realtime", playback_speed=1.0, snapshot_interval=0.1)), \
+             patch.object(main_module, "build_rows_demo_case", return_value=(sections, people, params)), \
+             patch.object(main_module, "print_input_data_summary"), \
+             patch.object(main_module, "build_section_layout_simple", return_value={"s1": SectionVisual((0.0, 0.0), (5.0, 0.0))}), \
+             patch.object(main_module, "run_simulation_with_history", return_value=(result, history)), \
+             patch.object(main_module, "HAS_MATPLOTLIB", True), \
+             patch.object(main_module, "matplotlib"), \
+             patch.object(main_module, "can_render_realtime", return_value=False), \
+             patch.object(main_module, "export_step_replay_html", return_value="artifacts/rows_replay.html") as export_mock:
+            main_module.main()
+
+        export_mock.assert_called_once()
+
     def test_wheelchair_and_three_m0_3_are_split_into_two_rows(self):
         section = Segment("horizontal_1", "horizontal", length=12.0, width=2.0)
         people = [
