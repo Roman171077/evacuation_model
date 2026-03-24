@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import base64
 import importlib.util
+import io
 import os
 import sys
 from dataclasses import dataclass
@@ -527,3 +529,178 @@ def show_realtime_evacuation(
     )
     plt.show()
     return fig, anim
+
+
+def export_step_replay_html(
+    history: List[Snapshot],
+    sections: Dict[str, Segment],
+    layout: Dict[str, SectionVisual],
+    output_path: str = "artifacts/rows_replay.html",
+) -> str:
+    """
+    Экспортирует покадровый replay в автономный HTML.
+    Работает в headless-средах: каждый шаг рендерится в PNG, далее
+    шаги переключаются в браузере (вперед/назад/пауза/ползунок).
+    """
+    require_matplotlib()
+    if not history:
+        raise ValueError("История пуста: нечего экспортировать в replay.")
+
+    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+
+    encoded_frames: List[str] = []
+    frame_times: List[float] = []
+    for snapshot in history:
+        fig, ax = plt.subplots(figsize=(13, 6))
+        render_snapshot(ax, snapshot, sections, layout)
+        buffer = io.BytesIO()
+        fig.savefig(buffer, format="png", dpi=130, bbox_inches="tight")
+        plt.close(fig)
+        encoded_frames.append(base64.b64encode(buffer.getvalue()).decode("ascii"))
+        frame_times.append(snapshot.time)
+
+    frame_interval_ms = 100
+    if len(frame_times) >= 2:
+        modeled_dt = max(frame_times[1] - frame_times[0], 1e-3)
+        frame_interval_ms = max(1, int(modeled_dt * 1000))
+
+    frames_js = ",".join(f'"data:image/png;base64,{frame}"' for frame in encoded_frames)
+    times_js = ",".join(f"{time_value:.6f}" for time_value in frame_times)
+
+    html = f"""<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>Rows Replay</title>
+  <style>
+    body {{
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+      margin: 0;
+      padding: 16px;
+      background: #f7f7f9;
+      color: #1f2937;
+    }}
+    .container {{
+      max-width: 1400px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+      padding: 16px;
+    }}
+    .controls {{
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }}
+    button {{
+      border: 1px solid #cbd5e1;
+      background: #f8fafc;
+      color: #0f172a;
+      border-radius: 8px;
+      padding: 6px 12px;
+      cursor: pointer;
+      font-size: 14px;
+    }}
+    button:hover {{ background: #eef2ff; }}
+    input[type="range"] {{
+      flex: 1;
+      min-width: 260px;
+    }}
+    .meta {{
+      font-size: 14px;
+      color: #334155;
+      margin-left: auto;
+    }}
+    #frame-img {{
+      width: 100%;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      background: #fff;
+    }}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="controls">
+      <button id="prev-btn">◀ Шаг назад</button>
+      <button id="play-btn">▶ Пуск</button>
+      <button id="next-btn">Шаг вперед ▶</button>
+      <input id="step-slider" type="range" min="0" max="{len(encoded_frames) - 1}" value="0" />
+      <div id="meta" class="meta"></div>
+    </div>
+    <img id="frame-img" alt="Кадр симуляции" />
+  </div>
+  <script>
+    const frames = [{frames_js}];
+    const times = [{times_js}];
+    const frameIntervalMs = {frame_interval_ms};
+    const frameImg = document.getElementById("frame-img");
+    const slider = document.getElementById("step-slider");
+    const meta = document.getElementById("meta");
+    const playBtn = document.getElementById("play-btn");
+    const prevBtn = document.getElementById("prev-btn");
+    const nextBtn = document.getElementById("next-btn");
+
+    let currentStep = 0;
+    let timer = null;
+
+    function renderStep(step) {{
+      currentStep = Math.max(0, Math.min(frames.length - 1, step));
+      frameImg.src = frames[currentStep];
+      slider.value = String(currentStep);
+      meta.textContent = `Шаг: ${{currentStep + 1}} / ${{frames.length}} | t=${{times[currentStep].toFixed(2)}} c`;
+    }}
+
+    function stopPlayback() {{
+      if (timer !== null) {{
+        clearInterval(timer);
+        timer = null;
+      }}
+      playBtn.textContent = "▶ Пуск";
+    }}
+
+    function startPlayback() {{
+      if (timer !== null) return;
+      playBtn.textContent = "⏸ Пауза";
+      timer = setInterval(() => {{
+        if (currentStep >= frames.length - 1) {{
+          stopPlayback();
+          return;
+        }}
+        renderStep(currentStep + 1);
+      }}, frameIntervalMs);
+    }}
+
+    playBtn.addEventListener("click", () => {{
+      if (timer === null) startPlayback();
+      else stopPlayback();
+    }});
+
+    prevBtn.addEventListener("click", () => {{
+      stopPlayback();
+      renderStep(currentStep - 1);
+    }});
+
+    nextBtn.addEventListener("click", () => {{
+      stopPlayback();
+      renderStep(currentStep + 1);
+    }});
+
+    slider.addEventListener("input", (event) => {{
+      stopPlayback();
+      renderStep(Number(event.target.value));
+    }});
+
+    renderStep(0);
+  </script>
+</body>
+</html>
+"""
+
+    with open(output_path, "w", encoding="utf-8") as replay_file:
+        replay_file.write(html)
+
+    return output_path

@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 from src.visualization import build_flow_summary_lines
 from main import (
@@ -14,6 +15,7 @@ from main import (
     build_rows_on_section,
     build_section_layout_simple,
     compute_snapshot_visual_placements,
+    parse_cli_args,
     run_simulation_with_history,
     update_people_position_state_on_sections,
     update_rows_and_flows_on_sections,
@@ -21,6 +23,11 @@ from main import (
 
 
 class MainRowBuildingTests(unittest.TestCase):
+    def test_parse_cli_args_accepts_replay_mode(self):
+        with patch("sys.argv", ["main.py", "--mode", "replay"]):
+            args = parse_cli_args()
+        self.assertEqual(args.mode, "replay")
+
     def test_wheelchair_and_three_m0_3_are_split_into_two_rows(self):
         section = Segment("horizontal_1", "horizontal", length=12.0, width=2.0)
         people = [
