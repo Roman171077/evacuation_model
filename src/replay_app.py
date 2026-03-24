@@ -152,20 +152,37 @@ def build_frame_figure(
         )
 
     placements = compute_snapshot_visual_placements(snapshot, sections, layout)
+    for placement in placements:
+        fig.add_shape(
+            type="rect",
+            x0=placement.center[0] - placement.length_m / 2,
+            x1=placement.center[0] + placement.length_m / 2,
+            y0=placement.center[1] - placement.width_m / 2,
+            y1=placement.center[1] + placement.width_m / 2,
+            line=dict(color="#111827", width=1),
+            fillcolor=placement.color,
+            opacity=0.9,
+            layer="above",
+        )
+
     fig.add_trace(
         go.Scatter(
             x=[placement.center[0] for placement in placements],
             y=[placement.center[1] for placement in placements],
-            mode="markers+text",
+            mode="text",
             text=[placement.label for placement in placements],
             textposition="middle center",
             textfont=dict(size=9, color="#111827"),
-            marker=dict(
-                size=[max(14, int(placement.width_m * 28)) for placement in placements],
-                color=[placement.color for placement in placements],
-                line=dict(width=1, color="#111827"),
-                opacity=0.9,
-            ),
+            hoverinfo="skip",
+            showlegend=False,
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=[placement.center[0] for placement in placements],
+            y=[placement.center[1] for placement in placements],
+            mode="markers",
+            marker=dict(size=10, color="rgba(0,0,0,0)"),
             hovertemplate=(
                 "pid=%{customdata[0]}<br>section=%{customdata[1]}"
                 "<br>row=%{customdata[2]} place=%{customdata[3]}<extra></extra>"
