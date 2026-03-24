@@ -23,7 +23,45 @@ class ReplayData:
     history: List[Snapshot]
 
 
-def load_replay_data(history_path: str) -> ReplayData:
+def _to_person_state(agent_payload: Dict[str, object]) -> PersonState:
+    return PersonState(
+        pid=int(agent_payload.get("pid", 0)),
+        group=str(agent_payload.get("group", "")),
+        section_id=str(agent_payload.get("section_id", "")),
+        x=float(agent_payload.get("x", 0.0)),
+        v=float(agent_payload.get("v", 0.0)),
+        row_index=int(agent_payload.get("row_index", -1)),
+        place_in_row=int(agent_payload.get("place_in_row", -1)),
+        flow_index=int(agent_payload.get("flow_index", -1)),
+        place_in_flow=int(agent_payload.get("place_in_flow", -1)),
+        flow_start_x=float(agent_payload.get("flow_start_x", 0.0)),
+        flow_end_x=float(agent_payload.get("flow_end_x", 0.0)),
+        flow_delta_x=float(agent_payload.get("flow_delta_x", 0.0)),
+        other_flow_people_ids=[int(pid) for pid in agent_payload.get("other_flow_people_ids", [])],  # type: ignore[arg-type]
+        finished=bool(agent_payload.get("finished", False)),
+        exit_time=float(agent_payload["exit_time"]) if agent_payload.get("exit_time") is not None else None,
+    )
+
+
+def _load_sections_from_meta(meta_path: str) -> Dict[str, Segment]:
+    with open(meta_path, "r", encoding="utf-8") as meta_file:
+        meta_payload = json.load(meta_file)
+
+    return {
+        section_data["sid"]: Segment(
+            sid=section_data["sid"],
+            section_type=section_data["section_type"],
+            length=float(section_data["length"]),
+            width=float(section_data["width"]),
+            next_section_id=section_data.get("next_section_id"),
+            merge_lj=float(section_data.get("merge_lj", 0.0)),
+            row_capacity=section_data.get("row_capacity"),
+        )
+        for section_data in meta_payload.get("sections", [])
+    }
+
+
+def _load_json_history(history_path: str) -> ReplayData:
     with open(history_path, "r", encoding="utf-8") as history_file:
         payload = json.load(history_file)
 
@@ -43,7 +81,7 @@ def load_replay_data(history_path: str) -> ReplayData:
     history: List[Snapshot] = []
     for step_payload in payload.get("history", []):
         stats = step_payload.get("stats", {})
-        people = [PersonState(**agent_payload) for agent_payload in step_payload.get("agents", [])]
+        people = [_to_person_state(agent_payload) for agent_payload in step_payload.get("agents", [])]
         history.append(
             Snapshot(
                 time=float(step_payload.get("time", 0.0)),
@@ -55,6 +93,34 @@ def load_replay_data(history_path: str) -> ReplayData:
         )
 
     return ReplayData(sections=sections, history=history)
+
+
+def _load_jsonl_history(steps_path: str, meta_path: str) -> ReplayData:
+    sections = _load_sections_from_meta(meta_path)
+    history: List[Snapshot] = []
+
+    with open(steps_path, "r", encoding="utf-8") as steps_file:
+        for line in steps_file:
+            step_payload = json.loads(line)
+            stats = step_payload.get("stats", {})
+            people = [_to_person_state(agent_payload) for agent_payload in step_payload.get("people", [])]
+            history.append(
+                Snapshot(
+                    time=float(step_payload.get("time", 0.0)),
+                    people=people,
+                    section_counts=dict(stats.get("section_counts", {})),
+                    finished_count=int(stats.get("finished_count", 0)),
+                    total_people=int(stats.get("total_people", len(people))),
+                )
+            )
+
+    return ReplayData(sections=sections, history=history)
+
+
+def load_replay_data(history_path: str, meta_path: str) -> ReplayData:
+    if history_path.endswith(".jsonl"):
+        return _load_jsonl_history(history_path, meta_path)
+    return _load_json_history(history_path)
 
 
 def build_frame_figure(
@@ -130,13 +196,24 @@ def main() -> None:
     st.set_page_config(page_title="Evacuation Replay", layout="wide")
     st.title("Покадровый replay эвакуации")
 
-    history_path = st.text_input("Путь к history.json", value="artifacts/history.json")
+    history_path = st.text_input("Путь к history (json/jsonl)", value="artifacts/replay_steps.jsonl")
+    meta_path = st.text_input("Путь к replay_meta.json", value="artifacts/replay_meta.json")
 
     if not os.path.exists(history_path):
-        st.warning("Файл history не найден. Сначала запустите `python main.py`, чтобы сформировать artifacts/history.json.")
+        st.warning(
+            "Файл history не найден. Сначала запустите `python main.py`, "
+            "чтобы сформировать artifacts/replay_steps.jsonl."
+        )
         return
 
-    replay_data = load_replay_data(history_path)
+    if history_path.endswith(".jsonl") and not os.path.exists(meta_path):
+        st.warning(
+            "Для JSONL-режима нужен файл meta. Запустите `python main.py`, "
+            "чтобы сформировать artifacts/replay_meta.json."
+        )
+        return
+
+    replay_data = load_replay_data(history_path, meta_path)
     if not replay_data.history:
         st.info("История пуста: нет шагов для отображения.")
         return

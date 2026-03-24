@@ -53,10 +53,14 @@ streamlit run src/replay_app.py
 - пуск/пауза;
 - переход на любой шаг ползунком.
 
-Дополнительно при каждом запуске `main.py` сохраняется `artifacts/history.json` с полной историей шагов:
+Дополнительно при каждом запуске `main.py` сохраняется `artifacts/history.json` (для совместимости со старым viewer):
 - `step`, `time`;
 - массив `agents` (позиции, ряды, потоки, состояние);
 - агрегированные метрики шага (`finished_count`, `remaining_count`, `section_counts`).
+
+И новый полный трейс расчета для каждого `dt`:
+- `artifacts/replay_steps.jsonl` — одна JSON-строка на шаг (`step`, `time`, `people`, `stats`);
+- `artifacts/replay_meta.json` — метаданные (`dt`, `step_count`, `people_count`, `sections`).
 
 ## Replay-визуализация (Streamlit)
 
@@ -72,6 +76,7 @@ streamlit run src/replay_app.py
 - автоостановка на последнем шаге;
 - метрики текущего шага (время модели, эвакуировано, осталось);
 - отображение числа людей по участкам.
+- поддержка форматов `history.json` и нового `replay_steps.jsonl + replay_meta.json`.
 
 ## Минимальный сценарий
 

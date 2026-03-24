@@ -1,5 +1,6 @@
 import unittest
 import json
+import os
 import tempfile
 from unittest.mock import patch
 
@@ -471,6 +472,41 @@ class MainRowBuildingTests(unittest.TestCase):
         self.assertIn("agents", first_step)
         self.assertIn("stats", first_step)
         self.assertIn("remaining_count", first_step["stats"])
+
+    def test_run_simulation_with_history_writes_full_step_trace_jsonl_and_meta(self):
+        scenario = build_rows_demo_case()
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            steps_path = os.path.join(temp_dir, "replay_steps.jsonl")
+            meta_path = os.path.join(temp_dir, "replay_meta.json")
+            result, _history = run_simulation_with_history(
+                scenario,
+                snapshot_interval=0.5,
+                verbose=False,
+                step_output_path=steps_path,
+                step_meta_output_path=meta_path,
+            )
+
+            self.assertTrue(os.path.exists(steps_path))
+            self.assertTrue(os.path.exists(meta_path))
+
+            with open(meta_path, "r", encoding="utf-8") as meta_file:
+                meta = json.load(meta_file)
+            self.assertEqual(meta["format_version"], 1)
+            self.assertEqual(meta["people_count"], result["total_people"])
+            self.assertGreater(meta["step_count"], 1)
+            self.assertIn("sections", meta)
+
+            with open(steps_path, "r", encoding="utf-8") as steps_file:
+                lines = [json.loads(line) for line in steps_file]
+
+            self.assertEqual(len(lines), meta["step_count"])
+            self.assertEqual(lines[0]["step"], 0)
+            self.assertIn("people", lines[0])
+            self.assertIn("stats", lines[0])
+            first_person = lines[0]["people"][0]
+            self.assertIn("row_index", first_person)
+            self.assertIn("flow_delta_x", first_person)
 
     def test_build_section_layout_simple_keeps_multi_segment_chain(self):
         sections = {

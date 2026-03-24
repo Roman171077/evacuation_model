@@ -959,10 +959,94 @@ def build_snapshot(model: SinglePersonSingleSegmentModel, snapshot_time: Optiona
     )
 
 
+def build_step_payload(model: SinglePersonSingleSegmentModel, step: int) -> Dict[str, object]:
+    section_counts: Dict[str, int] = {sid: 0 for sid in model.sections.keys()}
+    for person in model.people:
+        if not person.finished and person.section_id in section_counts:
+            section_counts[person.section_id] += 1
+
+    people_payload = []
+    for person in sorted(model.people, key=lambda current: current.pid):
+        people_payload.append(
+            {
+                "pid": person.pid,
+                "group": person.group,
+                "section_id": person.section_id,
+                "x": person.x,
+                "v": person.v,
+                "x_raw": person.x_raw,
+                "finished": person.finished,
+                "exit_time": person.exit_time,
+                "row_index": person.row_index,
+                "place_in_row": person.place_in_row,
+                "flow_index": person.flow_index,
+                "place_in_flow": person.place_in_flow,
+                "flow_member_count": person.flow_member_count,
+                "flow_start_x": person.flow_start_x,
+                "flow_end_x": person.flow_end_x,
+                "flow_delta_x": person.flow_delta_x,
+                "other_flow_people_ids": list(person.other_flow_people_ids),
+                "is_alone_on_section": person.is_alone_on_section,
+                "is_single_in_row": person.is_single_in_row,
+                "is_in_flow": person.is_in_flow,
+                "is_row_candidate": person.is_row_candidate,
+                "can_fit_in_row": person.can_fit_in_row,
+            }
+        )
+
+    finished_count = sum(1 for person in model.people if person.finished)
+    total_people = len(model.people)
+    return {
+        "step": step,
+        "time": round(model.time, 3),
+        "people": people_payload,
+        "stats": {
+            "finished_count": finished_count,
+            "total_people": total_people,
+            "remaining_count": total_people - finished_count,
+            "section_counts": section_counts,
+        },
+    }
+
+
+def write_step_replay_meta_json(
+    sections: Dict[str, Segment],
+    dt: float,
+    step_count: int,
+    people_count: int,
+    output_path: str = "artifacts/replay_meta.json",
+) -> str:
+    section_payload = [
+        {
+            "sid": section.sid,
+            "section_type": section.section_type,
+            "length": section.length,
+            "width": section.width,
+            "next_section_id": section.next_section_id,
+            "merge_lj": section.merge_lj,
+            "row_capacity": section.row_capacity,
+        }
+        for section in sections.values()
+    ]
+    payload = {
+        "format_version": 1,
+        "dt": dt,
+        "step_count": step_count,
+        "people_count": people_count,
+        "sections": section_payload,
+    }
+
+    with open(output_path, "w", encoding="utf-8") as meta_file:
+        json.dump(payload, meta_file, ensure_ascii=False, indent=2)
+    return output_path
+
+
 def run_simulation_with_history(
     scenario: Tuple[Dict[str, Segment], List[Person], SimulationParams],
     snapshot_interval: float = 1.0,
     verbose: bool = True,
+    step_output_path: Optional[str] = None,
+    step_meta_output_path: str = "artifacts/replay_meta.json",
 ) -> Tuple[Dict[str, float | int | Dict[int, float | None]], List[Snapshot]]:
     sections, people, params = scenario
     reset_model_state(people)
@@ -970,12 +1054,19 @@ def run_simulation_with_history(
     model = SinglePersonSingleSegmentModel(sections, people, params)
     apply_row_geometry_on_sections(model.people, model.sections)
     history: List[Snapshot] = [build_snapshot(model, 0.0)]
+    step_count = 0
+    step_file = open(step_output_path, "w", encoding="utf-8") if step_output_path else None
+    if step_file is not None:
+        step_file.write(json.dumps(build_step_payload(model, step_count), ensure_ascii=False) + "\n")
 
     next_snapshot_time = snapshot_interval
 
     while not model.all_finished() and model.time < model.params.max_time:
         model.step()
         model.time += model.params.dt
+        step_count += 1
+        if step_file is not None:
+            step_file.write(json.dumps(build_step_payload(model, step_count), ensure_ascii=False) + "\n")
 
         while model.time + 1e-9 >= next_snapshot_time:
             history.append(build_snapshot(model, next_snapshot_time))
@@ -997,6 +1088,15 @@ def run_simulation_with_history(
 
     if not history or history[-1].time < model.time - 1e-9:
         history.append(build_snapshot(model, round(model.time, 3)))
+    if step_file is not None:
+        step_file.close()
+        write_step_replay_meta_json(
+            sections=model.sections,
+            dt=model.params.dt,
+            step_count=step_count + 1,
+            people_count=len(model.people),
+            output_path=step_meta_output_path,
+        )
 
     return result, history
 
