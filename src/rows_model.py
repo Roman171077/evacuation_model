@@ -566,16 +566,26 @@ def create_new_row(row_index: int, person: Person) -> Row:
 
 
 def apply_longitudinal_row_offsets(rows: List[Row]) -> None:
-    previous_row_mean_x: Optional[float] = None
+    if not rows:
+        return
 
-    for row in rows:
-        original_mean_x = get_row_mean_x(row)
-        target_mean_x = original_mean_x
+    rows_sorted = sorted(rows, key=lambda row: (get_row_mean_x(row), row.row_index))
+    previous_row_right: Optional[float] = None
 
-        if previous_row_mean_x is not None:
-            target_mean_x = max(original_mean_x, previous_row_mean_x + ROW_STEP_X)
+    for new_row_index, row in enumerate(rows_sorted):
+        row.row_index = new_row_index
+        for place_in_row, person in enumerate(row.people):
+            person.row_index = new_row_index
+            person.place_in_row = place_in_row
 
-        row.longitudinal_shift = target_mean_x - original_mean_x
+        original_left = min(person.x - person.c_geom / 2.0 for person in row.people)
+        original_right = max(person.x + person.c_geom / 2.0 for person in row.people)
+        target_left = original_left
+
+        if previous_row_right is not None:
+            target_left = max(original_left, previous_row_right + ROW_STEP_X)
+
+        row.longitudinal_shift = target_left - original_left
 
         if row.longitudinal_shift > 0.0:
             for person in row.people:
@@ -583,7 +593,9 @@ def apply_longitudinal_row_offsets(rows: List[Row]) -> None:
 
         row.row_left = min(person.x - person.c_geom / 2.0 for person in row.people)
         row.row_right = max(person.x + person.c_geom / 2.0 for person in row.people)
-        previous_row_mean_x = get_row_mean_x(row)
+        previous_row_right = row.row_right
+
+    rows[:] = rows_sorted
 
 
 def build_rows_on_section(
@@ -604,15 +616,22 @@ def build_rows_on_section(
             rows.append(create_new_row(0, person))
             continue
 
-        current_row = rows[-1]
-        candidate = is_candidate_for_row(current_row, person)
-        width_ok = can_fit_into_row(current_row, person, section) if candidate else False
+        candidate_row: Optional[Row] = None
+        candidate = False
+        width_ok = False
+
+        for row in reversed(rows):
+            candidate = is_candidate_for_row(row, person)
+            width_ok = can_fit_into_row(row, person, section) if candidate else False
+            if candidate and width_ok:
+                candidate_row = row
+                break
 
         person.is_row_candidate = candidate
         person.can_fit_in_row = width_ok
 
-        if candidate and width_ok:
-            add_person_to_row(current_row, person)
+        if candidate_row is not None:
+            add_person_to_row(candidate_row, person)
         else:
             rows.append(create_new_row(len(rows), person))
 
@@ -635,7 +654,8 @@ def get_row_mean_x(row: Row) -> float:
 
 
 def rows_are_consecutive(front_row: Row, back_row: Row, threshold: float = FLOW_ROW_GAP_THRESHOLD) -> bool:
-    return abs(get_row_mean_x(back_row) - get_row_mean_x(front_row)) <= threshold + 1e-9
+    longitudinal_gap = back_row.row_left - front_row.row_right
+    return longitudinal_gap <= threshold + 1e-9
 
 
 def build_flows_on_section(rows: List[Row], section: Segment) -> List[Flow]:
