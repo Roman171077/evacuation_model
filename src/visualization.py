@@ -21,7 +21,8 @@ if HAS_MATPLOTLIB:
     import matplotlib.pyplot as plt
     from matplotlib.animation import FuncAnimation
     from matplotlib.lines import Line2D
-    from matplotlib.patches import Ellipse
+    from matplotlib.patches import Rectangle
+    from matplotlib.transforms import Affine2D
 else:
     matplotlib = None
     plt = None
@@ -29,13 +30,20 @@ else:
     class FuncAnimation:  # type: ignore[override]
         pass
 
-    class Ellipse:  # type: ignore[override]
+    class Rectangle:  # type: ignore[override]
         def __init__(self, *args, **kwargs) -> None:
             pass
 
     class Line2D:  # type: ignore[override]
         def __init__(self, *args, **kwargs) -> None:
             pass
+
+    class Affine2D:  # type: ignore[override]
+        def rotate_deg_around(self, *args, **kwargs):
+            return self
+
+        def __add__(self, other):
+            return self
 
 from src.rows_model import (
     MOBILITY_GROUP_COLORS,
@@ -294,18 +302,24 @@ def draw_people(ax: plt.Axes, snapshot: Snapshot, sections: Dict[str, Segment], 
         dy = section_visual.end[1] - section_visual.start[1]
         angle_deg = 0.0 if abs(dx) + abs(dy) <= 1e-9 else degrees(atan2(dy, dx))
 
-        ellipse = Ellipse(
-            xy=placement.center,
+        rectangle = Rectangle(
+            (
+                placement.center[0] - placement.length_m / 2,
+                placement.center[1] - placement.width_m / 2,
+            ),
             width=placement.length_m,
             height=placement.width_m,
-            angle=angle_deg,
             facecolor=placement.color,
             edgecolor="black",
             linewidth=0.8,
             alpha=0.85,
             zorder=10,
         )
-        ax.add_patch(ellipse)
+        transform = Affine2D().rotate_deg_around(
+            placement.center[0], placement.center[1], angle_deg
+        ) + ax.transData
+        rectangle.set_transform(transform)
+        ax.add_patch(rectangle)
         ax.text(
             placement.center[0],
             placement.center[1],
