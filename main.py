@@ -33,6 +33,7 @@ from src.rows_model import (
     reset_model_state,
     run_simulation,
     run_simulation_with_history,
+    save_replay_history_json,
     update_people_position_state_on_sections,
     update_rows_and_flows_on_sections,
 )
@@ -97,6 +98,7 @@ __all__ = [
     'reset_model_state',
     'run_simulation',
     'run_simulation_with_history',
+    'save_replay_history_json',
     'show_realtime_evacuation',
     'update_people_position_state_on_sections',
     'update_rows_and_flows_on_sections',
@@ -143,6 +145,8 @@ def main() -> None:
         snapshot_interval=args.snapshot_interval,
         verbose=False,
     )
+    history_path = save_replay_history_json(sections, history)
+    print(f'История шагов сохранена: {history_path}')
 
     if HAS_MATPLOTLIB:
         if args.mode == 'realtime' and can_render_realtime():

@@ -1,4 +1,6 @@
 import unittest
+import json
+import tempfile
 from unittest.mock import patch
 
 from src.visualization import build_flow_summary_lines
@@ -17,6 +19,7 @@ from main import (
     compute_snapshot_visual_placements,
     parse_cli_args,
     run_simulation_with_history,
+    save_replay_history_json,
     update_people_position_state_on_sections,
     update_rows_and_flows_on_sections,
 )
@@ -446,6 +449,28 @@ class MainRowBuildingTests(unittest.TestCase):
 
     def test_visual_api_is_exported_from_separate_module(self):
         self.assertEqual(compute_snapshot_visual_placements.__module__, "src.visualization")
+
+    def test_save_replay_history_json_exports_expected_shape(self):
+        scenario = build_rows_demo_case()
+        sections, _, _ = scenario
+        _, history = run_simulation_with_history(scenario, snapshot_interval=0.5, verbose=False)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = f"{temp_dir}/history.json"
+            saved_path = save_replay_history_json(sections, history, output_path=output_path)
+            self.assertEqual(saved_path, output_path)
+
+            with open(saved_path, "r", encoding="utf-8") as history_file:
+                payload = json.load(history_file)
+
+        self.assertEqual(payload["format_version"], 1)
+        self.assertTrue(payload["sections"])
+        self.assertTrue(payload["history"])
+        first_step = payload["history"][0]
+        self.assertEqual(first_step["step"], 0)
+        self.assertIn("agents", first_step)
+        self.assertIn("stats", first_step)
+        self.assertIn("remaining_count", first_step["stats"])
 
     def test_build_section_layout_simple_keeps_multi_segment_chain(self):
         sections = {

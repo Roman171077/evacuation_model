@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import json
+from dataclasses import asdict, dataclass, field
 from typing import Dict, List, Optional, Tuple
 
 # =========================================================
@@ -998,6 +999,58 @@ def run_simulation_with_history(
         history.append(build_snapshot(model, round(model.time, 3)))
 
     return result, history
+
+
+def build_replay_history_payload(
+    sections: Dict[str, Segment],
+    history: List[Snapshot],
+) -> Dict[str, object]:
+    section_payload = [
+        {
+            "sid": section.sid,
+            "section_type": section.section_type,
+            "length": section.length,
+            "width": section.width,
+            "next_section_id": section.next_section_id,
+            "merge_lj": section.merge_lj,
+            "row_capacity": section.row_capacity,
+        }
+        for section in sections.values()
+    ]
+
+    history_payload = []
+    for step_index, snapshot in enumerate(history):
+        agents = [asdict(person_state) for person_state in snapshot.people]
+        history_payload.append(
+            {
+                "step": step_index,
+                "time": snapshot.time,
+                "agents": agents,
+                "stats": {
+                    "finished_count": snapshot.finished_count,
+                    "total_people": snapshot.total_people,
+                    "remaining_count": snapshot.total_people - snapshot.finished_count,
+                    "section_counts": snapshot.section_counts,
+                },
+            }
+        )
+
+    return {
+        "format_version": 1,
+        "sections": section_payload,
+        "history": history_payload,
+    }
+
+
+def save_replay_history_json(
+    sections: Dict[str, Segment],
+    history: List[Snapshot],
+    output_path: str = "artifacts/history.json",
+) -> str:
+    payload = build_replay_history_payload(sections, history)
+    with open(output_path, "w", encoding="utf-8") as history_file:
+        json.dump(payload, history_file, ensure_ascii=False, indent=2)
+    return output_path
 
 
 # =========================================================
