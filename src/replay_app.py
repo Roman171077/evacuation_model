@@ -177,6 +177,11 @@ def _build_flow_membership_rows(snapshot: Snapshot, sections: Dict[str, Segment]
         section_people.sort(key=lambda person: (person.flow_index < 0, person.flow_index, person.place_in_flow, person.x, person.pid))
 
         for person in section_people:
+            other_flow_people = (
+                ", ".join(str(pid) for pid in person.other_flow_people_ids)
+                if person.other_flow_people_ids
+                else "—"
+            )
             rows.append(
                 {
                     "section": sid,
@@ -184,6 +189,7 @@ def _build_flow_membership_rows(snapshot: Snapshot, sections: Dict[str, Segment]
                     "flow": f"F{person.flow_index}" if person.flow_index >= 0 else "—",
                     "status": "в потоке" if person.flow_index >= 0 else "вне потока",
                     "x, м": f"{person.x:.2f}",
+                    "pid других людей в потоке": other_flow_people,
                 }
             )
 
@@ -219,6 +225,7 @@ def build_frame_figure(
         )
 
     placements = compute_snapshot_visual_placements(snapshot, sections, layout)
+    person_state_by_pid = {person.pid: person for person in snapshot.people}
     for placement in placements:
         fig.add_shape(
             type="rect",
@@ -252,10 +259,22 @@ def build_frame_figure(
             marker=dict(size=10, color="rgba(0,0,0,0)"),
             hovertemplate=(
                 "pid=%{customdata[0]}<br>section=%{customdata[1]}"
-                "<br>row=%{customdata[2]} place=%{customdata[3]}<extra></extra>"
+                "<br>row=%{customdata[2]} place=%{customdata[3]}"
+                "<br>flow=%{customdata[4]} place=%{customdata[5]}"
+                "<br>другие pid в потоке=%{customdata[6]}<extra></extra>"
             ),
             customdata=[
-                [placement.pid, placement.section_id, placement.row_index, placement.place_in_row]
+                [
+                    placement.pid,
+                    placement.section_id,
+                    placement.row_index,
+                    placement.place_in_row,
+                    person_state_by_pid[placement.pid].flow_index,
+                    person_state_by_pid[placement.pid].place_in_flow,
+                    (", ".join(str(pid) for pid in person_state_by_pid[placement.pid].other_flow_people_ids)
+                     if person_state_by_pid[placement.pid].other_flow_people_ids
+                     else "—"),
+                ]
                 for placement in placements
             ],
             showlegend=False,

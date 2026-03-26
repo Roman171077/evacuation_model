@@ -5,6 +5,7 @@ import tempfile
 from unittest.mock import patch
 
 from src.visualization import build_flow_summary_lines
+from src.replay_app import _build_flow_membership_rows
 from main import (
     Person,
     PersonState,
@@ -456,6 +457,44 @@ class MainRowBuildingTests(unittest.TestCase):
         self.assertEqual(len(history), 1)
         self.assertIn("horizontal_1", history[0].section_counts)
         self.assertIn("horizontal_2", history[0].section_counts)
+
+
+    def test_flow_membership_rows_include_other_flow_people_ids(self):
+        section = Segment("horizontal_1", "horizontal", length=12.0, width=1.0)
+        people = [
+            Person(pid=1, group="M4_WHEELCHAIR", section_id="horizontal_1", x=5.00),
+            Person(pid=2, group="M4_WHEELCHAIR", section_id="horizontal_1", x=5.00),
+            Person(pid=3, group="M4_WHEELCHAIR", section_id="horizontal_1", x=5.00),
+        ]
+
+        update_people_position_state_on_sections(people, {"horizontal_1": section})
+        snapshot = Snapshot(
+            time=0.0,
+            people=[
+                PersonState(
+                    pid=person.pid,
+                    group=person.group,
+                    section_id=person.section_id,
+                    x=person.x,
+                    flow_index=person.flow_index,
+                    place_in_flow=person.place_in_flow,
+                    other_flow_people_ids=list(person.other_flow_people_ids),
+                    finished=person.finished,
+                )
+                for person in people
+            ],
+            section_counts={"horizontal_1": 3},
+            finished_count=0,
+            total_people=3,
+        )
+
+        rows = _build_flow_membership_rows(snapshot, {"horizontal_1": section})
+
+        self.assertEqual(len(rows), 3)
+        self.assertIn("pid других людей в потоке", rows[0])
+        self.assertEqual(rows[0]["pid других людей в потоке"], "2, 3")
+        self.assertEqual(rows[1]["pid других людей в потоке"], "1, 3")
+        self.assertEqual(rows[2]["pid других людей в потоке"], "1, 2")
 
     def test_visual_api_is_exported_from_separate_module(self):
         self.assertEqual(compute_snapshot_visual_placements.__module__, "src.visualization")
