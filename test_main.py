@@ -190,16 +190,36 @@ class MainRowBuildingTests(unittest.TestCase):
         state = update_people_position_state_on_sections(people, {"horizontal_1": section})
 
         self.assertEqual(len(state["horizontal_1"]["rows"]), 1)
-        self.assertEqual(len(state["horizontal_1"]["flows"]), 0)
+        self.assertEqual(len(state["horizontal_1"]["flows"]), 1)
         for expected_place, person in enumerate(people):
             self.assertEqual(person.row_index, 0)
             self.assertEqual(person.place_in_row, expected_place)
             self.assertFalse(person.is_alone_on_section)
             self.assertFalse(person.is_single_in_row)
-            self.assertFalse(person.is_in_flow)
-            self.assertEqual(person.flow_index, -1)
-            self.assertEqual(person.flow_delta_x, 0.0)
-            self.assertEqual(person.other_flow_people_ids, [])
+            self.assertTrue(person.is_in_flow)
+            self.assertEqual(person.flow_index, 0)
+            self.assertAlmostEqual(person.flow_delta_x, 0.10, places=6)
+            self.assertEqual(person.other_flow_people_ids, [pid for pid in [1, 2, 3] if pid != person.pid])
+
+    def test_flow_breaks_on_gap_over_threshold_and_single_person_is_not_a_flow(self):
+        section = Segment("horizontal_1", "horizontal", length=20.0, width=2.0)
+        people = [
+            Person(pid=1, group="M0_3", section_id="horizontal_1", x=4.00),
+            Person(pid=2, group="M0_3", section_id="horizontal_1", x=4.10),
+            Person(pid=3, group="M0_3", section_id="horizontal_1", x=4.20),
+            Person(pid=4, group="M0_3", section_id="horizontal_1", x=5.80),
+        ]
+
+        state = update_people_position_state_on_sections(people, {"horizontal_1": section})
+        flows = state["horizontal_1"]["flows"]
+
+        self.assertEqual(len(flows), 1)
+        self.assertEqual([person.pid for person in flows[0].people], [1, 2, 3])
+        self.assertTrue(people[0].is_in_flow)
+        self.assertTrue(people[1].is_in_flow)
+        self.assertTrue(people[2].is_in_flow)
+        self.assertFalse(people[3].is_in_flow)
+        self.assertEqual(people[3].flow_index, -1)
 
     def test_position_state_for_multiple_rows_without_flow(self):
         section = Segment("horizontal_1", "horizontal", length=12.0, width=1.0)
@@ -399,7 +419,7 @@ class MainRowBuildingTests(unittest.TestCase):
         self.assertEqual(people[0].other_flow_people_ids, [2, 3])
         self.assertEqual(people[2].other_flow_people_ids, [1, 2])
 
-    def test_rows_merge_into_flow_on_next_step(self):
+    def test_rows_with_gap_over_threshold_do_not_merge_into_flow_on_next_step(self):
         section = Segment("horizontal_1", "horizontal", length=12.0, width=1.0)
         people = [
             Person(pid=1, group="M4_WHEELCHAIR", section_id="horizontal_1", x=5.0),
@@ -409,17 +429,15 @@ class MainRowBuildingTests(unittest.TestCase):
         model = SinglePersonSingleSegmentModel({"horizontal_1": section}, people, params)
 
         update_rows_and_flows_on_sections(model.people, model.sections)
-        self.assertEqual(people[0].flow_index, 0)
-        self.assertEqual(people[1].flow_index, 0)
+        self.assertEqual(people[0].flow_index, -1)
+        self.assertEqual(people[1].flow_index, -1)
 
         model.step()
 
-        self.assertTrue(people[0].is_in_flow)
-        self.assertTrue(people[1].is_in_flow)
-        self.assertEqual(people[0].flow_index, 0)
-        self.assertEqual(people[1].flow_index, 0)
-        self.assertEqual(people[0].other_flow_people_ids, [2])
-        self.assertEqual(people[1].other_flow_people_ids, [1])
+        self.assertFalse(people[0].is_in_flow)
+        self.assertFalse(people[1].is_in_flow)
+        self.assertEqual(people[0].flow_index, -1)
+        self.assertEqual(people[1].flow_index, -1)
 
     def test_build_snapshot_stores_row_and_flow_state_fields(self):
         section = Segment("horizontal_1", "horizontal", length=12.0, width=1.0)

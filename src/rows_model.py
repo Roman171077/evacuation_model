@@ -690,53 +690,52 @@ def build_flows_on_section(rows: List[Row], section: Segment) -> List[Flow]:
         return []
 
     ordered_rows = sorted(rows, key=lambda row: (get_row_mean_x(row), row.row_index))
-    flows: List[Flow] = []
-    current_rows: List[Row] = []
-
+    projected_x_by_pid: Dict[int, float] = {}
+    ordered_people: List[Person] = []
     for row in ordered_rows:
-        if not current_rows:
-            current_rows = [row]
-            continue
+        for person in row.people:
+            ordered_people.append(person)
+            projected_x_by_pid[person.pid] = person.x - row.longitudinal_shift
+    ordered_people.sort(key=lambda person: (projected_x_by_pid.get(person.pid, person.x), person.pid))
 
-        if rows_are_consecutive(current_rows[-1], row, threshold=FLOW_ROW_GAP_THRESHOLD):
-            current_rows.append(row)
-            continue
+    if len(ordered_people) < 2:
+        return []
 
-        if len(current_rows) >= 2:
-            flow_people = [person for current_row in current_rows for person in current_row.people]
-            ordered_people = sorted(flow_people, key=lambda person: (person.x, person.pid))
-            start_x = ordered_people[0].x
-            end_x = ordered_people[-1].x
-            flows.append(
-                Flow(
-                    flow_index=len(flows),
-                    section_id=ordered_people[0].section_id,
-                    rows=list(current_rows),
-                    people=ordered_people,
-                    start_x=start_x,
-                    end_x=end_x,
-                    delta_x=end_x - start_x,
-                )
-            )
+    row_by_index = {row.row_index: row for row in rows}
+    flows: List[Flow] = []
+    current_people: List[Person] = [ordered_people[0]]
 
-        current_rows = [row]
+    def flush_current_flow() -> None:
+        if len(current_people) < 2:
+            return
 
-    if len(current_rows) >= 2:
-        flow_people = [person for current_row in current_rows for person in current_row.people]
-        ordered_people = sorted(flow_people, key=lambda person: (person.x, person.pid))
-        start_x = ordered_people[0].x
-        end_x = ordered_people[-1].x
+        ordered_by_actual_x = sorted(current_people, key=lambda person: (person.x, person.pid))
+        start_x = ordered_by_actual_x[0].x
+        end_x = ordered_by_actual_x[-1].x
+        unique_row_indices = sorted({person.row_index for person in current_people if person.row_index in row_by_index})
+        unique_rows = [row_by_index[row_index] for row_index in unique_row_indices]
         flows.append(
             Flow(
                 flow_index=len(flows),
-                section_id=ordered_people[0].section_id,
-                rows=list(current_rows),
-                people=ordered_people,
+                section_id=current_people[0].section_id,
+                rows=unique_rows,
+                people=ordered_by_actual_x,
                 start_x=start_x,
                 end_x=end_x,
                 delta_x=end_x - start_x,
             )
         )
+
+    for person in ordered_people[1:]:
+        gap = projected_x_by_pid.get(person.pid, person.x) - projected_x_by_pid.get(current_people[-1].pid, current_people[-1].x)
+        if gap <= FLOW_ROW_GAP_THRESHOLD + 1e-9:
+            current_people.append(person)
+            continue
+
+        flush_current_flow()
+        current_people = [person]
+
+    flush_current_flow()
 
     return flows
 
