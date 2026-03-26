@@ -525,6 +525,41 @@ def reset_model_state(people: List[Person]) -> None:
         reset_person_position_state(person)
 
 
+def validate_initial_same_coordinate_width(
+    people: List[Person],
+    sections: Dict[str, Segment],
+) -> Optional[str]:
+    """
+    Проверка перед стартом расчета:
+    если у людей с одинаковой координатой x на одном участке суммарная ширина a_geom
+    превышает ширину участка, расчет не выполняется.
+    """
+    grouped: Dict[Tuple[str, float], List[Person]] = {}
+    for person in people:
+        key = (person.section_id, round(person.x, 6))
+        grouped.setdefault(key, []).append(person)
+
+    violations: List[str] = []
+    for (section_id, x_coord), group in grouped.items():
+        if len(group) <= 1:
+            continue
+        section = sections.get(section_id)
+        if section is None:
+            continue
+        total_width = sum(current.a_geom for current in group)
+        if total_width <= section.width + 1e-9:
+            continue
+        people_ids = ", ".join(str(current.pid) for current in sorted(group, key=lambda current: current.pid))
+        violations.append(
+            f"участок={section_id}, x={x_coord:.3f}, сумма a_geom={total_width:.3f} > "
+            f"ширина участка={section.width:.3f}, pid=[{people_ids}]"
+        )
+
+    if not violations:
+        return None
+    return "ПРЕДУПРЕЖДЕНИЕ: расчет остановлен. Конфликт ширины на старте:\n" + "\n".join(violations)
+
+
 def get_person_interval_x(person: Person) -> Tuple[float, float]:
     person_left = person.x - person.c_geom / 2.0
     person_right = person.x + person.c_geom / 2.0
@@ -875,18 +910,12 @@ class SinglePersonSingleSegmentModel:
 
     def step(self) -> None:
         """
-        Этап без плотности:
-        1) свободное движение каждого человека,
-        2) переходы между соседними участками,
-        3) затем отдельное обновление состояния положения на участках
-           (ряды, потоки, флаги положения человека).
+        Этап без плотности: только расчет скорости и перемещение.
         """
         for person in self.people:
             if person.finished:
                 continue
             self._move_person(person)
-
-        update_rows_and_flows_on_sections(self.people, self.sections)
 
     def build_result(self) -> Dict[str, float | int | Dict[int, float | None]]:
         total_path_length = sum(section.length for section in self.sections.values())
@@ -933,8 +962,18 @@ def run_simulation(
 ) -> Dict[str, float | int | Dict[int, float | None]]:
     sections, people, params = scenario
     reset_model_state(people)
+    startup_warning = validate_initial_same_coordinate_width(people, sections)
+    if startup_warning is not None:
+        print(startup_warning)
+        return {
+            "modeled_path_length_m": sum(section.length for section in sections.values()),
+            "speed_m_per_s": 0.0,
+            "travel_time_sec": 0.0,
+            "finished_count": 0,
+            "total_people": len(people),
+            "exit_times": {person.pid: None for person in people},
+        }
     model = SinglePersonSingleSegmentModel(sections, people, params)
-    apply_row_geometry_on_sections(model.people, model.sections)
     return model.run(verbose=verbose)
 
 
@@ -1070,9 +1109,32 @@ def run_simulation_with_history(
 ) -> Tuple[Dict[str, float | int | Dict[int, float | None]], List[Snapshot]]:
     sections, people, params = scenario
     reset_model_state(people)
+    startup_warning = validate_initial_same_coordinate_width(people, sections)
+    if startup_warning is not None:
+        print(startup_warning)
+        result: Dict[str, float | int | Dict[int, float | None]] = {
+            "modeled_path_length_m": sum(section.length for section in sections.values()),
+            "speed_m_per_s": 0.0,
+            "travel_time_sec": 0.0,
+            "finished_count": 0,
+            "total_people": len(people),
+            "exit_times": {person.pid: None for person in people},
+        }
+        model = SinglePersonSingleSegmentModel(sections, people, params)
+        history = [build_snapshot(model, 0.0)]
+        if step_output_path:
+            with open(step_output_path, "w", encoding="utf-8") as step_file:
+                step_file.write(json.dumps(build_step_payload(model, 0), ensure_ascii=False) + "\n")
+            write_step_replay_meta_json(
+                sections=model.sections,
+                dt=model.params.dt,
+                step_count=1,
+                people_count=len(model.people),
+                output_path=step_meta_output_path,
+            )
+        return result, history
 
     model = SinglePersonSingleSegmentModel(sections, people, params)
-    apply_row_geometry_on_sections(model.people, model.sections)
     history: List[Snapshot] = [build_snapshot(model, 0.0)]
     step_count = 0
     step_file = open(step_output_path, "w", encoding="utf-8") if step_output_path else None
