@@ -50,8 +50,6 @@ from src.rows_model import (
     Person,
     Segment,
     Snapshot,
-    build_rows_on_section,
-    compute_person_row_centers,
     get_profile_color,
 )
 
@@ -264,30 +262,25 @@ def compute_snapshot_visual_placements(
         section = sections[sid]
         visual = layout[sid]
         nx, ny = perpendicular_unit_vector(visual)
-        rows = build_rows_on_section(people, section, reposition_rows=True)
-
-        for row in rows:
-            centers = compute_person_row_centers(row, section)
-            for person in row.people:
-                px, py = interpolate_position_on_section(section, visual, person.x)
-                lateral_offset = centers[person.pid]
-                center = (px + nx * lateral_offset, py + ny * lateral_offset)
-                person_state = snapshot_state_by_pid.get(person.pid)
-                row_index = person.row_index if person_state is None else person_state.row_index
-                place_in_row = person.place_in_row if person_state is None else person_state.place_in_row
-                placements.append(
-                    PersonVisualPlacement(
-                        pid=person.pid,
-                        section_id=sid,
-                        center=center,
-                        length_m=person.c_geom,
-                        width_m=person.a_geom,
-                        color=get_profile_color(person.group),
-                        label=f"{person.pid}\nR{row_index}:{place_in_row}",
-                        row_index=row_index,
-                        place_in_row=place_in_row,
-                    )
+        for person in sorted(people, key=lambda current: (current.x, current.pid)):
+            px, py = interpolate_position_on_section(section, visual, person.x)
+            center = (px + nx * 0.0, py + ny * 0.0)
+            person_state = snapshot_state_by_pid.get(person.pid)
+            row_index = -1 if person_state is None else person_state.row_index
+            place_in_row = -1 if person_state is None else person_state.place_in_row
+            placements.append(
+                PersonVisualPlacement(
+                    pid=person.pid,
+                    section_id=sid,
+                    center=center,
+                    length_m=person.c_geom,
+                    width_m=person.a_geom,
+                    color=get_profile_color(person.group),
+                    label=f"{person.pid}",
+                    row_index=row_index,
+                    place_in_row=place_in_row,
                 )
+            )
 
     return placements
 

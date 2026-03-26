@@ -109,7 +109,7 @@ __all__ = [
 
 def parse_cli_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description='Демонстрация геометрии рядов и эвакуации с визуализацией в реальном времени.'
+        description='Демонстрация эвакуации с визуализацией в реальном времени.'
     )
     parser.add_argument(
         '--mode',
