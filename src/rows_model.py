@@ -10,7 +10,7 @@ from typing import Dict, List, Optional, Tuple
 # =========================================================
 
 ROW_STEP_X = 0.25  # сохранено, хотя на этапе 1 не используется
-FLOW_ROW_GAP_THRESHOLD = 0.25
+FLOW_ROW_GAP_THRESHOLD = 0.5
 
 FLOW_PROFILES: Dict[str, Dict[str, object]] = {
     # ---------------------------
