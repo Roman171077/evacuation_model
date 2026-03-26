@@ -32,18 +32,18 @@ ROWS_DEMO_SECTION_SPECS: tuple[dict[str, object], ...] = (
 
 
 ROWS_DEMO_PERSON_SPECS: tuple[dict[str, object], ...] = (
-    {'pid': 1, 'group': 'M4_WHEELCHAIR', 'section_id': 'horizontal_1', 'x': 18.00},
-    {'pid': 2, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 21.75},
-    {'pid': 3, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 22.25},
-    {'pid': 4, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 21.75},
-    {'pid': 5, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 22.25},
-    {'pid': 6, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 21.75},
-    {'pid': 7, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 22.25},
-    {'pid': 8, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 21.75},
-    {'pid': 9, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 22.25},
-    {'pid': 10, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 21.75},
-    {'pid': 11, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 22.25},
-    {'pid': 12, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 21.75},
+    {'pid': 1, 'group': 'M4_WHEELCHAIR', 'section_id': 'horizontal_1', 'x': 9.50},
+    {'pid': 2, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 11.70},
+    {'pid': 3, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 13.90},
+    {'pid': 4, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 16.10},
+    {'pid': 5, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 18.30},
+    {'pid': 6, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 20.50},
+    {'pid': 7, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 11.50},
+    {'pid': 8, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 13.70},
+    {'pid': 9, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 15.90},
+    {'pid': 10, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 18.10},
+    {'pid': 11, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 20.30},
+    {'pid': 12, 'group': 'M0_3', 'section_id': 'horizontal_1', 'x': 22.50},
 )
 
 
