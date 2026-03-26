@@ -259,7 +259,11 @@ def main() -> None:
     with speed_col:
         frame_delay = st.slider("Задержка между шагами, мс", min_value=50, max_value=2000, value=250, step=50)
 
-    selected_step = st.slider("Шаг", min_value=0, max_value=max_step, value=st.session_state.current_step)
+    if max_step == 0:
+        st.caption("Доступен только один шаг (0).")
+        selected_step = 0
+    else:
+        selected_step = st.slider("Шаг", min_value=0, max_value=max_step, value=st.session_state.current_step)
     if selected_step != st.session_state.current_step:
         st.session_state.is_playing = False
         st.session_state.current_step = selected_step
