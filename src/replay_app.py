@@ -9,7 +9,7 @@ from typing import Dict, List
 import plotly.graph_objects as go
 import streamlit as st
 
-from src.rows_model import PersonState, Segment, Snapshot
+from src.rows_model import Person, PersonState, Segment, Snapshot, update_rows_and_flows_on_sections
 from src.visualization import (
     SectionVisual,
     build_section_layout_simple,
@@ -117,10 +117,53 @@ def _load_jsonl_history(steps_path: str, meta_path: str) -> ReplayData:
     return ReplayData(sections=sections, history=history)
 
 
+def _recompute_snapshot_position_state(snapshot: Snapshot, sections: Dict[str, Segment]) -> None:
+    active_people = [
+        Person(
+            pid=person.pid,
+            group=person.group,
+            section_id=person.section_id,
+            x=person.x,
+            v=person.v,
+            finished=person.finished,
+            exit_time=person.exit_time,
+        )
+        for person in snapshot.people
+        if not person.finished
+    ]
+
+    if active_people:
+        update_rows_and_flows_on_sections(active_people, sections)
+
+    state_by_pid = {person.pid: person for person in active_people}
+    for person_state in snapshot.people:
+        source = state_by_pid.get(person_state.pid)
+        if source is None:
+            person_state.row_index = -1
+            person_state.place_in_row = -1
+            person_state.flow_index = -1
+            person_state.place_in_flow = -1
+            person_state.flow_start_x = 0.0
+            person_state.flow_end_x = 0.0
+            person_state.flow_delta_x = 0.0
+            person_state.other_flow_people_ids = []
+            continue
+
+        person_state.row_index = source.row_index
+        person_state.place_in_row = source.place_in_row
+        person_state.flow_index = source.flow_index
+        person_state.place_in_flow = source.place_in_flow
+        person_state.flow_start_x = source.flow_start_x
+        person_state.flow_end_x = source.flow_end_x
+        person_state.flow_delta_x = source.flow_delta_x
+        person_state.other_flow_people_ids = list(source.other_flow_people_ids)
+
+
 def load_replay_data(history_path: str, meta_path: str) -> ReplayData:
-    if history_path.endswith(".jsonl"):
-        return _load_jsonl_history(history_path, meta_path)
-    return _load_json_history(history_path)
+    replay_data = _load_jsonl_history(history_path, meta_path) if history_path.endswith(".jsonl") else _load_json_history(history_path)
+    for snapshot in replay_data.history:
+        _recompute_snapshot_position_state(snapshot, replay_data.sections)
+    return replay_data
 
 
 def _build_flow_membership_rows(snapshot: Snapshot, sections: Dict[str, Segment]) -> List[Dict[str, str]]:
