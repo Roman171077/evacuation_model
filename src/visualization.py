@@ -326,40 +326,59 @@ def draw_people(ax: plt.Axes, snapshot: Snapshot, sections: Dict[str, Segment], 
 
 
 def build_flow_summary_lines(snapshot: Snapshot, sections: Dict[str, Segment]) -> List[str]:
-    flow_members_by_section: Dict[str, Dict[int, List[Tuple[int, int]]]] = {
+    flow_members_by_section: Dict[str, Dict[int, List[Tuple[int, int, float]]]] = {
         sid: {} for sid in sections.keys()
     }
+    outside_flow_by_section: Dict[str, List[Tuple[int, float]]] = {sid: [] for sid in sections.keys()}
 
     for person in snapshot.people:
         if person.finished or person.section_id == "EXIT":
             continue
         if person.section_id not in flow_members_by_section:
             continue
-        if person.flow_index < 0:
+
+        if person.flow_index >= 0:
+            section_flows = flow_members_by_section[person.section_id]
+            section_flows.setdefault(person.flow_index, []).append((person.place_in_flow, person.pid, person.x))
             continue
 
-        section_flows = flow_members_by_section[person.section_id]
-        section_flows.setdefault(person.flow_index, []).append((person.place_in_flow, person.pid))
+        outside_flow_by_section[person.section_id].append((person.pid, person.x))
 
-    lines = ["Потоки по участкам:"]
+    lines = ["Локальные потоки и одиночные люди по участкам:"]
 
     for sid in sections.keys():
         section_flows = flow_members_by_section[sid]
-        if not section_flows:
+        section_outside = sorted(outside_flow_by_section[sid], key=lambda item: item[1])
+
+        if not section_flows and not section_outside:
             lines.append(f"{sid}: —")
             continue
 
         lines.append(f"{sid}:")
-        for flow_index in sorted(section_flows.keys()):
-            ordered_people = [
-                pid
-                for _place, pid in sorted(
-                    section_flows[flow_index],
-                    key=lambda item: (item[0], item[1]),
+        if section_flows:
+            lines.append("  В потоке:")
+            for flow_index in sorted(section_flows.keys()):
+                ordered_people = [
+                    (pid, x_coord)
+                    for _place, pid, x_coord in sorted(
+                        section_flows[flow_index],
+                        key=lambda item: (item[0], item[1]),
+                    )
+                ]
+                flow_members = ", ".join(
+                    f"pid={pid} (x={x_coord:.2f} м)" for pid, x_coord in ordered_people
                 )
-            ]
-            flow_members = ", ".join(str(pid) for pid in ordered_people)
-            lines.append(f"  F{flow_index}: {flow_members}")
+                lines.append(f"    F{flow_index}: {flow_members}")
+        else:
+            lines.append("  В потоке: —")
+
+        if section_outside:
+            outside_members = ", ".join(
+                f"pid={pid} (x={x_coord:.2f} м)" for pid, x_coord in section_outside
+            )
+            lines.append(f"  Вне потока: {outside_members}")
+        else:
+            lines.append("  Вне потока: —")
 
     return lines
 

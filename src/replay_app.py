@@ -123,6 +123,30 @@ def load_replay_data(history_path: str, meta_path: str) -> ReplayData:
     return _load_json_history(history_path)
 
 
+def _build_flow_membership_rows(snapshot: Snapshot, sections: Dict[str, Segment]) -> List[Dict[str, str]]:
+    rows: List[Dict[str, str]] = []
+    for sid in sections.keys():
+        section_people = [
+            person
+            for person in snapshot.people
+            if not person.finished and person.section_id == sid
+        ]
+        section_people.sort(key=lambda person: (person.flow_index < 0, person.flow_index, person.place_in_flow, person.x, person.pid))
+
+        for person in section_people:
+            rows.append(
+                {
+                    "section": sid,
+                    "pid": str(person.pid),
+                    "flow": f"F{person.flow_index}" if person.flow_index >= 0 else "—",
+                    "status": "в потоке" if person.flow_index >= 0 else "вне потока",
+                    "x, м": f"{person.x:.2f}",
+                }
+            )
+
+    return rows
+
+
 def build_frame_figure(
     snapshot: Snapshot,
     sections: Dict[str, Segment],
@@ -283,6 +307,13 @@ def main() -> None:
     with st.expander("Люди по участкам"):
         if snapshot.section_counts:
             st.json(snapshot.section_counts)
+        else:
+            st.write("Нет активных людей на участках.")
+
+    with st.expander("Локальные потоки и одиночные люди"):
+        flow_rows = _build_flow_membership_rows(snapshot, replay_data.sections)
+        if flow_rows:
+            st.dataframe(flow_rows, use_container_width=True, hide_index=True)
         else:
             st.write("Нет активных людей на участках.")
 
