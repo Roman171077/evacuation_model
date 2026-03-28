@@ -50,6 +50,7 @@ from src.rows_model import (
     Person,
     Segment,
     Snapshot,
+    get_profile_movement_params,
     get_profile_color,
 )
 
@@ -72,6 +73,10 @@ class PersonVisualPlacement:
     row_index: int
     place_in_row: int
     flow_density: float
+    local_density: float
+    speed_mps: float
+    v0_mpm: float
+    d0: float
 
 
 def require_matplotlib() -> None:
@@ -267,6 +272,7 @@ def compute_snapshot_visual_placements(
             px, py = interpolate_position_on_section(section, visual, person.x)
             center = (px + nx * 0.0, py + ny * 0.0)
             person_state = snapshot_state_by_pid.get(person.pid)
+            movement_params = get_profile_movement_params(person.group, section.section_type)
             row_index = -1 if person_state is None else person_state.row_index
             place_in_row = -1 if person_state is None else person_state.place_in_row
             placements.append(
@@ -281,6 +287,10 @@ def compute_snapshot_visual_placements(
                     row_index=row_index,
                     place_in_row=place_in_row,
                     flow_density=0.0 if person_state is None else person_state.flow_density,
+                    local_density=0.0 if person_state is None else person_state.local_density,
+                    speed_mps=0.0 if person_state is None else person_state.v,
+                    v0_mpm=float(movement_params["V0"]),
+                    d0=float(movement_params["D0"]),
                 )
             )
 
@@ -328,7 +338,10 @@ def draw_people(ax: plt.Axes, snapshot: Snapshot, sections: Dict[str, Segment], 
         ax.text(
             placement.center[0],
             placement.center[1] - max(0.18, placement.width_m * 0.8),
-            f"D={placement.flow_density:.2f}",
+            (
+                f"V={placement.speed_mps:.2f} м/с | V0={placement.v0_mpm:.1f} м/мин\n"
+                f"D={placement.local_density:.2f} | D0={placement.d0:.2f}"
+            ),
             ha="center",
             va="top",
             fontsize=6,
