@@ -14,6 +14,7 @@ from src.rows_model import (
     PersonState,
     Segment,
     Snapshot,
+    compute_person_speed_components_stage1,
     update_person_local_density_on_sections,
     update_rows_and_flows_on_sections,
 )
@@ -46,6 +47,10 @@ def _to_person_state(agent_payload: Dict[str, object]) -> PersonState:
         speed_mps=float(agent_payload.get("speed_mps", agent_payload.get("v", 0.0))),
         v0_mpm=float(agent_payload.get("v0_mpm", 0.0)),
         d0=float(agent_payload.get("d0", 0.0)),
+        ai=float(agent_payload.get("ai", 0.0)),
+        m=float(agent_payload.get("m", 1.0)),
+        section_type=str(agent_payload.get("section_type", "")),
+        speed_section_type=str(agent_payload.get("speed_section_type", "")),
         row_index=int(agent_payload.get("row_index", -1)),
         place_in_row=int(agent_payload.get("place_in_row", -1)),
         flow_index=int(agent_payload.get("flow_index", -1)),
@@ -179,6 +184,18 @@ def _recompute_snapshot_position_state(snapshot: Snapshot, sections: Dict[str, S
         person_state.flow_delta_x = source.flow_delta_x
         person_state.flow_density = source.flow_density
         person_state.local_density = source.local_density
+        if source.section_id in sections:
+            section = sections[source.section_id]
+            speed_components = compute_person_speed_components_stage1(source, section)
+            person_state.section_type = str(speed_components["section_type"])
+            person_state.speed_section_type = str(speed_components["speed_section_type"])
+            person_state.v0_mpm = float(speed_components["V0"])
+            person_state.d0 = float(speed_components["D0"])
+            person_state.ai = float(speed_components["ai"])
+            person_state.m = float(speed_components["m"])
+        else:
+            person_state.section_type = ""
+            person_state.speed_section_type = ""
         person_state.other_flow_people_ids = list(source.other_flow_people_ids)
 
 
@@ -201,7 +218,7 @@ def _build_flow_membership_rows(snapshot: Snapshot, sections: Dict[str, Segment]
 
         for person in section_people:
             section_type = sections[sid].section_type
-            m = _compute_m(section_type, max(0.0, person.local_density))
+            m = person.m if person.m > 0 else _compute_m(section_type, max(0.0, person.local_density))
             other_flow_people = (
                 ", ".join(str(pid) for pid in person.other_flow_people_ids)
                 if person.other_flow_people_ids
@@ -210,15 +227,18 @@ def _build_flow_membership_rows(snapshot: Snapshot, sections: Dict[str, Segment]
             rows.append(
                 {
                     "section": sid,
+                    "section_type": section_type,
+                    "speed_section_type": person.speed_section_type or section_type,
                     "pid": str(person.pid),
                     "flow": f"F{person.flow_index}" if person.flow_index >= 0 else "—",
                     "status": "в потоке" if person.flow_index >= 0 else "вне потока",
                     "x, м": f"{person.x:.2f}",
                     "speed_mps": f"{person.speed_mps:.3f}",
                     "v0_mpm": f"{person.v0_mpm:.1f}",
+                    "ai": f"{person.ai:.3f}",
                     "d0": f"{person.d0:.3f}",
                     "m": f"{m:.3f}",
-                    "D потока, м²/м²": f"{person.flow_density:.3f}",
+                    "D потока, м²/м²": f"{person.local_density:.3f}",
                     "pid других людей в потоке": other_flow_people,
                 }
             )
