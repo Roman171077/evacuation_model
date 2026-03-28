@@ -110,6 +110,10 @@ def _load_json_history(history_path: str) -> ReplayData:
                 time=float(step_payload.get("time", 0.0)),
                 people=people,
                 section_counts=dict(stats.get("section_counts", {})),
+                section_flow_density={
+                    sid: float(value)
+                    for sid, value in dict(stats.get("section_flow_density", {})).items()
+                },
                 finished_count=int(stats.get("finished_count", 0)),
                 total_people=int(stats.get("total_people", len(people))),
             )
@@ -132,6 +136,10 @@ def _load_jsonl_history(steps_path: str, meta_path: str) -> ReplayData:
                     time=float(step_payload.get("time", 0.0)),
                     people=people,
                     section_counts=dict(stats.get("section_counts", {})),
+                    section_flow_density={
+                        sid: float(value)
+                        for sid, value in dict(stats.get("section_flow_density", {})).items()
+                    },
                     finished_count=int(stats.get("finished_count", 0)),
                     total_people=int(stats.get("total_people", len(people))),
                 )
@@ -202,6 +210,10 @@ def _recompute_snapshot_position_state(snapshot: Snapshot, sections: Dict[str, S
 def load_replay_data(history_path: str, meta_path: str) -> ReplayData:
     replay_data = _load_jsonl_history(history_path, meta_path) if history_path.endswith(".jsonl") else _load_json_history(history_path)
     for snapshot in replay_data.history:
+        if not snapshot.section_flow_density:
+            snapshot.section_flow_density = {
+                sid: 0.0 for sid in replay_data.sections.keys()
+            }
         _recompute_snapshot_position_state(snapshot, replay_data.sections)
     return replay_data
 
@@ -420,7 +432,16 @@ def main() -> None:
 
     with st.expander("Люди по участкам"):
         if snapshot.section_counts:
-            st.json(snapshot.section_counts)
+            section_rows = []
+            for sid in replay_data.sections.keys():
+                section_rows.append(
+                    {
+                        "Участок": sid,
+                        "Людей, чел.": snapshot.section_counts.get(sid, 0),
+                        "Dvj(t), м²/м²": round(snapshot.section_flow_density.get(sid, 0.0), 4),
+                    }
+                )
+            st.dataframe(section_rows, use_container_width=True, hide_index=True)
         else:
             st.write("Нет активных людей на участках.")
 

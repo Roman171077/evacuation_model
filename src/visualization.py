@@ -440,7 +440,10 @@ def draw_status_box(ax: plt.Axes, snapshot: Snapshot, sections: Dict[str, Segmen
     ]
 
     for sid in sections.keys():
-        lines.append(f"{sid}: {snapshot.section_counts.get(sid, 0)}")
+        lines.append(
+            f"{sid}: N={snapshot.section_counts.get(sid, 0)}, "
+            f"Dvj={snapshot.section_flow_density.get(sid, 0.0):.3f}"
+        )
 
     text = "\n".join(lines)
 
