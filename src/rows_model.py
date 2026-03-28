@@ -716,9 +716,12 @@ def build_flows_on_section(rows: List[Row], section: Segment) -> List[Flow]:
         if len(current_people) < 2:
             return
 
-        ordered_by_actual_x = sorted(current_people, key=lambda person: (person.x, person.pid))
-        start_x = ordered_by_actual_x[0].x
-        end_x = ordered_by_actual_x[-1].x
+        ordered_by_projected_x = sorted(
+            current_people,
+            key=lambda person: (projected_x_by_pid.get(person.pid, person.x), person.pid),
+        )
+        start_x = projected_x_by_pid.get(ordered_by_projected_x[0].pid, ordered_by_projected_x[0].x)
+        end_x = projected_x_by_pid.get(ordered_by_projected_x[-1].pid, ordered_by_projected_x[-1].x)
         unique_row_indices = sorted({person.row_index for person in current_people if person.row_index in row_by_index})
         unique_rows = [row_by_index[row_index] for row_index in unique_row_indices]
         flows.append(
@@ -726,7 +729,7 @@ def build_flows_on_section(rows: List[Row], section: Segment) -> List[Flow]:
                 flow_index=len(flows),
                 section_id=current_people[0].section_id,
                 rows=unique_rows,
-                people=ordered_by_actual_x,
+                people=ordered_by_projected_x,
                 start_x=start_x,
                 end_x=end_x,
                 delta_x=end_x - start_x,
