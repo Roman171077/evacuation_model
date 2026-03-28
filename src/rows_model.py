@@ -849,6 +849,7 @@ def compute_person_speed_stage1(person: Person, section: Segment) -> float:
     """
     Скорость зависит от локальной плотности по инженерной формуле:
     V = V0, если D <= D0
+    V = V0 * (1 - ai * ln(D / D0)), если D > D0
     V = V0 * (1 - ai * ln(D / D0)) * m, если D > D0
     где D = local_density.
     Для проема (door): m = 1.0 при D < 0.5, иначе m = 1.25 - 0.05 * D.
