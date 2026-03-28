@@ -450,6 +450,9 @@ class PersonState:
     section_id: str
     x: float
     v: float = 0.0
+    speed_mps: float = 0.0
+    v0_mpm: float = 0.0
+    d0: float = 0.0
     row_index: int = -1
     place_in_row: int = -1
     flow_index: int = -1
@@ -1068,28 +1071,41 @@ def run_simulation(
 # =========================================================
 
 def build_snapshot(model: SinglePersonSingleSegmentModel, snapshot_time: Optional[float] = None) -> Snapshot:
-    people_state = [
-        PersonState(
-            pid=person.pid,
-            group=person.group,
-            section_id=person.section_id,
-            x=person.x,
-            v=person.v,
-            row_index=person.row_index,
-            place_in_row=person.place_in_row,
-            flow_index=person.flow_index,
-            place_in_flow=person.place_in_flow,
-            flow_start_x=person.flow_start_x,
-            flow_end_x=person.flow_end_x,
-            flow_delta_x=person.flow_delta_x,
-            flow_density=person.flow_density,
-            local_density=person.local_density,
-            other_flow_people_ids=list(person.other_flow_people_ids),
-            finished=person.finished,
-            exit_time=person.exit_time,
+    people_state: List[PersonState] = []
+    for person in model.people:
+        if not person.finished and person.section_id in model.sections:
+            section = model.sections[person.section_id]
+            movement_params = get_profile_movement_params(person.group, section.section_type)
+            v0_mpm = float(movement_params["V0"])
+            d0 = float(movement_params["D0"])
+        else:
+            v0_mpm = 0.0
+            d0 = 0.0
+
+        people_state.append(
+            PersonState(
+                pid=person.pid,
+                group=person.group,
+                section_id=person.section_id,
+                x=person.x,
+                v=person.v,
+                speed_mps=person.v,
+                v0_mpm=v0_mpm,
+                d0=d0,
+                row_index=person.row_index,
+                place_in_row=person.place_in_row,
+                flow_index=person.flow_index,
+                place_in_flow=person.place_in_flow,
+                flow_start_x=person.flow_start_x,
+                flow_end_x=person.flow_end_x,
+                flow_delta_x=person.flow_delta_x,
+                flow_density=person.flow_density,
+                local_density=person.local_density,
+                other_flow_people_ids=list(person.other_flow_people_ids),
+                finished=person.finished,
+                exit_time=person.exit_time,
+            )
         )
-        for person in model.people
-    ]
 
     section_counts: Dict[str, int] = {sid: 0 for sid in model.sections.keys()}
 
@@ -1114,6 +1130,17 @@ def build_step_payload(model: SinglePersonSingleSegmentModel, step: int) -> Dict
 
     people_payload = []
     for person in sorted(model.people, key=lambda current: current.pid):
+        if not person.finished and person.section_id in model.sections:
+            movement_params = get_profile_movement_params(
+                person.group,
+                model.sections[person.section_id].section_type,
+            )
+            v0_mpm = float(movement_params["V0"])
+            d0 = float(movement_params["D0"])
+        else:
+            v0_mpm = 0.0
+            d0 = 0.0
+
         people_payload.append(
             {
                 "pid": person.pid,
@@ -1121,6 +1148,9 @@ def build_step_payload(model: SinglePersonSingleSegmentModel, step: int) -> Dict
                 "section_id": person.section_id,
                 "x": person.x,
                 "v": person.v,
+                "speed_mps": person.v,
+                "v0_mpm": v0_mpm,
+                "d0": d0,
                 "x_raw": person.x_raw,
                 "finished": person.finished,
                 "exit_time": person.exit_time,
