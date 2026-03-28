@@ -497,6 +497,7 @@ class Snapshot:
     time: float
     people: List[PersonState]
     section_counts: Dict[str, int]
+    section_flow_density: Dict[str, float]
     finished_count: int
     total_people: int
 
@@ -954,6 +955,28 @@ def update_person_local_density_on_sections(
     return state
 
 
+def compute_section_flow_density(people: List[Person], sections: Dict[str, Segment]) -> Dict[str, float]:
+    """
+    Dvj(t) = (sum(f_i)) / (a_j * b_j)
+    где sum(f_i) — сумма площадей горизонтальной проекции людей на j-ом участке.
+    """
+    area_sum_by_section: Dict[str, float] = {sid: 0.0 for sid in sections.keys()}
+    for person in people:
+        if person.finished or person.section_id not in area_sum_by_section:
+            continue
+        area_sum_by_section[person.section_id] += person.f
+
+    density_by_section: Dict[str, float] = {}
+    for sid, section in sections.items():
+        denominator = section.length * section.width
+        if denominator <= 1e-9:
+            density_by_section[sid] = 0.0
+            continue
+        density_by_section[sid] = max(0.0, area_sum_by_section.get(sid, 0.0) / denominator)
+
+    return density_by_section
+
+
 def apply_row_geometry_on_sections(people: List[Person], sections: Dict[str, Segment]) -> None:
     update_rows_and_flows_on_sections(people, sections)
 
@@ -1180,10 +1203,13 @@ def build_snapshot(model: SinglePersonSingleSegmentModel, snapshot_time: Optiona
         if not person.finished and person.section_id in section_counts:
             section_counts[person.section_id] += 1
 
+    section_flow_density = compute_section_flow_density(model.people, model.sections)
+
     return Snapshot(
         time=round(model.time if snapshot_time is None else snapshot_time, 3),
         people=people_state,
         section_counts=section_counts,
+        section_flow_density=section_flow_density,
         finished_count=sum(1 for person in model.people if person.finished),
         total_people=len(model.people),
     )
@@ -1194,6 +1220,7 @@ def build_step_payload(model: SinglePersonSingleSegmentModel, step: int) -> Dict
     for person in model.people:
         if not person.finished and person.section_id in section_counts:
             section_counts[person.section_id] += 1
+    section_flow_density = compute_section_flow_density(model.people, model.sections)
 
     people_payload = []
     for person in sorted(model.people, key=lambda current: current.pid):
@@ -1263,6 +1290,7 @@ def build_step_payload(model: SinglePersonSingleSegmentModel, step: int) -> Dict
             "total_people": total_people,
             "remaining_count": total_people - finished_count,
             "section_counts": section_counts,
+            "section_flow_density": section_flow_density,
         },
     }
 
@@ -1412,6 +1440,7 @@ def build_replay_history_payload(
                     "total_people": snapshot.total_people,
                     "remaining_count": snapshot.total_people - snapshot.finished_count,
                     "section_counts": snapshot.section_counts,
+                    "section_flow_density": snapshot.section_flow_density,
                 },
             }
         )
