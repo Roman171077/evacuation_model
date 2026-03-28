@@ -112,10 +112,10 @@ class MainRowBuildingTests(unittest.TestCase):
         self.assertEqual(len(rows), 3)
         self.assertAlmostEqual(people[0].x, 5.00)
         self.assertAlmostEqual(people[1].x, 6.45, places=2)
-        self.assertAlmostEqual(people[2].x, 7.44, places=2)
+        self.assertAlmostEqual(people[2].x, 7.53, places=2)
         self.assertEqual(rows[0].longitudinal_shift, 0.0)
         self.assertAlmostEqual(rows[1].longitudinal_shift, 1.45, places=2)
-        self.assertAlmostEqual(rows[2].longitudinal_shift, 2.44, places=2)
+        self.assertAlmostEqual(rows[2].longitudinal_shift, 2.53, places=2)
 
         for front_row, back_row in zip(rows, rows[1:]):
             self.assertGreaterEqual(back_row.row_left, front_row.row_right + 0.25 - 1e-9)
@@ -144,12 +144,11 @@ class MainRowBuildingTests(unittest.TestCase):
 
         rows = build_rows_on_section(people, section)
 
-        self.assertEqual(len(rows), 3)
-        self.assertEqual(len(rows[0].people), 4)
-        self.assertEqual(len(rows[1].people), 4)
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(len(rows[0].people), 7)
+        self.assertEqual(len(rows[1].people), 2)
         self.assertGreater(len(rows[1].people), 1)
-        self.assertEqual(len(rows[2].people), 1)
-        self.assertEqual([person.pid for person in rows[1].people], [5, 6, 7, 8])
+        self.assertEqual([person.pid for person in rows[1].people], [8, 9])
 
     def test_step_moves_people_only_by_speed_without_row_constraints(self):
         section = Segment("horizontal_1", "horizontal", length=12.0, width=1.0)
@@ -424,13 +423,13 @@ class MainRowBuildingTests(unittest.TestCase):
         self.assertAlmostEqual(flows[0].start_x, original_x[7], places=6)
         self.assertAlmostEqual(flows[0].end_x, original_x[12], places=6)
         self.assertAlmostEqual(flows[0].delta_x, original_x[12] - original_x[7], places=6)
-        self.assertGreater(people[-1].x - people[0].x, flows[0].delta_x)
+        self.assertGreaterEqual(people[-1].x - people[0].x, flows[0].delta_x)
 
         update_person_local_density_on_sections(people, {"horizontal_1": section}, section_state)
-        expected_density = (5 * 0.10) / (section.width * (original_x[12] - original_x[7]))
+        expected_density = (6 * 0.10) / (section.width * section.length)
         self.assertAlmostEqual(people[0].flow_density, expected_density, places=6)
 
-    def test_local_density_is_computed_for_each_person_from_other_people_area(self):
+    def test_local_density_is_computed_from_total_people_area_on_section(self):
         section = Segment("horizontal_1", "horizontal", length=12.0, width=1.0)
         people = [
             Person(pid=1, group="M4_WHEELCHAIR", section_id="horizontal_1", x=5.00),
@@ -444,8 +443,9 @@ class MainRowBuildingTests(unittest.TestCase):
         self.assertAlmostEqual(people[0].flow_delta_x, 0.0, places=9)
         self.assertAlmostEqual(people[1].flow_delta_x, 0.0, places=9)
         self.assertAlmostEqual(people[2].flow_delta_x, 0.0, places=9)
-        self.assertAlmostEqual(people[1].local_density, 0.0, places=9)
-        self.assertAlmostEqual(people[0].local_density, 0.0, places=9)
+        expected_density = sum(person.f for person in people) / (section.length * section.width)
+        self.assertAlmostEqual(people[1].local_density, expected_density, places=9)
+        self.assertAlmostEqual(people[0].local_density, expected_density, places=9)
         self.assertAlmostEqual(people[0].flow_density, people[0].local_density, places=9)
 
     def test_position_state_rebuilds_after_transition_to_new_section(self):
@@ -629,6 +629,7 @@ class MainRowBuildingTests(unittest.TestCase):
         self.assertIn("agents", first_step)
         self.assertIn("stats", first_step)
         self.assertIn("remaining_count", first_step["stats"])
+        self.assertIn("section_densities", first_step["stats"])
 
     def test_run_simulation_with_history_writes_full_step_trace_jsonl_and_meta(self):
         scenario = build_rows_demo_case()
@@ -661,6 +662,7 @@ class MainRowBuildingTests(unittest.TestCase):
             self.assertEqual(lines[0]["step"], 0)
             self.assertIn("people", lines[0])
             self.assertIn("stats", lines[0])
+            self.assertIn("section_densities", lines[0]["stats"])
             first_person = lines[0]["people"][0]
             self.assertIn("row_index", first_person)
             self.assertIn("flow_delta_x", first_person)
