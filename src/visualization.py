@@ -275,6 +275,9 @@ def compute_snapshot_visual_placements(
             movement_params = get_profile_movement_params(person.group, section.section_type)
             row_index = -1 if person_state is None else person_state.row_index
             place_in_row = -1 if person_state is None else person_state.place_in_row
+            speed_mps = 0.0 if person_state is None else person_state.speed_mps
+            v0_mpm = float(movement_params["V0"]) if person_state is None else person_state.v0_mpm
+            d0 = float(movement_params["D0"]) if person_state is None else person_state.d0
             placements.append(
                 PersonVisualPlacement(
                     pid=person.pid,
@@ -288,9 +291,9 @@ def compute_snapshot_visual_placements(
                     place_in_row=place_in_row,
                     flow_density=0.0 if person_state is None else person_state.flow_density,
                     local_density=0.0 if person_state is None else person_state.local_density,
-                    speed_mps=0.0 if person_state is None else person_state.v,
-                    v0_mpm=float(movement_params["V0"]),
-                    d0=float(movement_params["D0"]),
+                    speed_mps=speed_mps,
+                    v0_mpm=v0_mpm,
+                    d0=d0,
                 )
             )
 
