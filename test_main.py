@@ -332,14 +332,16 @@ class MainRowBuildingTests(unittest.TestCase):
             Person(pid=3, group="M4_WHEELCHAIR", section_id="horizontal_1", x=5.00),
         ]
 
+        original_x = people[0].x
+
         state = update_people_position_state_on_sections(people, {"horizontal_1": section})
         flows = state["horizontal_1"]["flows"]
 
         self.assertEqual(len(state["horizontal_1"]["rows"]), 3)
         self.assertEqual(len(flows), 1)
-        self.assertAlmostEqual(flows[0].start_x, people[0].x)
-        self.assertAlmostEqual(flows[0].end_x, people[2].x)
-        self.assertAlmostEqual(flows[0].delta_x, people[2].x - people[0].x)
+        self.assertAlmostEqual(flows[0].start_x, original_x)
+        self.assertAlmostEqual(flows[0].end_x, original_x)
+        self.assertAlmostEqual(flows[0].delta_x, 0.0)
         for expected_row, person in enumerate(people):
             self.assertEqual(person.row_index, expected_row)
             self.assertTrue(person.is_in_flow)
@@ -347,9 +349,9 @@ class MainRowBuildingTests(unittest.TestCase):
             self.assertEqual(person.place_in_flow, expected_row)
             self.assertEqual(person.flow_member_count, 3)
             self.assertEqual(len(person.other_flow_people_ids), 2)
-            self.assertAlmostEqual(person.flow_start_x, people[0].x)
-            self.assertAlmostEqual(person.flow_end_x, people[2].x)
-            self.assertAlmostEqual(person.flow_delta_x, people[2].x - people[0].x)
+            self.assertAlmostEqual(person.flow_start_x, original_x)
+            self.assertAlmostEqual(person.flow_end_x, original_x)
+            self.assertAlmostEqual(person.flow_delta_x, 0.0)
             self.assertEqual(person.other_flow_people_ids, [pid for pid in [1, 2, 3] if pid != person.pid])
 
     def test_position_state_for_mixed_group_flow(self):
@@ -371,6 +373,31 @@ class MainRowBuildingTests(unittest.TestCase):
             self.assertEqual(person.flow_member_count, 3)
             self.assertEqual(len(person.other_flow_people_ids), 2)
 
+    def test_flow_delta_x_uses_unshifted_row_projection_for_density(self):
+        section = Segment("horizontal_1", "horizontal", length=20.0, width=2.0)
+        people = [
+            Person(pid=7, group="M0_3", section_id="horizontal_1", x=14.10),
+            Person(pid=8, group="M0_3", section_id="horizontal_1", x=14.40),
+            Person(pid=9, group="M0_3", section_id="horizontal_1", x=14.70),
+            Person(pid=10, group="M0_3", section_id="horizontal_1", x=15.10),
+            Person(pid=11, group="M0_3", section_id="horizontal_1", x=15.40),
+            Person(pid=12, group="M0_3", section_id="horizontal_1", x=15.70),
+        ]
+        original_x = {person.pid: person.x for person in people}
+
+        section_state = update_rows_and_flows_on_sections(people, {"horizontal_1": section})
+        flows = section_state["horizontal_1"]["flows"]
+
+        self.assertEqual(len(flows), 1)
+        self.assertAlmostEqual(flows[0].start_x, original_x[7], places=6)
+        self.assertAlmostEqual(flows[0].end_x, original_x[12], places=6)
+        self.assertAlmostEqual(flows[0].delta_x, original_x[12] - original_x[7], places=6)
+        self.assertGreater(people[-1].x - people[0].x, flows[0].delta_x)
+
+        update_person_local_density_on_sections(people, {"horizontal_1": section}, section_state)
+        expected_density = (5 * 0.10) / (section.width * (original_x[12] - original_x[7]))
+        self.assertAlmostEqual(people[0].flow_density, expected_density, places=6)
+
     def test_local_density_is_computed_for_each_person_from_other_people_area(self):
         section = Segment("horizontal_1", "horizontal", length=12.0, width=1.0)
         people = [
@@ -382,10 +409,11 @@ class MainRowBuildingTests(unittest.TestCase):
         section_state = update_rows_and_flows_on_sections(people, {"horizontal_1": section})
         update_person_local_density_on_sections(people, {"horizontal_1": section}, section_state)
 
-        flow_delta_x = people[2].x - people[0].x
-        self.assertGreater(flow_delta_x, 0.0)
-        self.assertAlmostEqual(people[1].local_density, (0.96 + 0.96) / (section.width * flow_delta_x), places=6)
-        self.assertAlmostEqual(people[0].local_density, (0.15 + 0.96) / (section.width * flow_delta_x), places=6)
+        self.assertAlmostEqual(people[0].flow_delta_x, 0.0, places=9)
+        self.assertAlmostEqual(people[1].flow_delta_x, 0.0, places=9)
+        self.assertAlmostEqual(people[2].flow_delta_x, 0.0, places=9)
+        self.assertAlmostEqual(people[1].local_density, 0.0, places=9)
+        self.assertAlmostEqual(people[0].local_density, 0.0, places=9)
         self.assertAlmostEqual(people[0].flow_density, people[0].local_density, places=9)
 
     def test_position_state_rebuilds_after_transition_to_new_section(self):
