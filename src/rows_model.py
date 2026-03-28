@@ -309,6 +309,8 @@ SECTION_FALLBACK_MAP: Dict[str, str] = {
     "exit": "horizontal",
 }
 
+DEBUG_TRACE_PID = 1
+
 
 def get_profile(profile_name: str) -> Dict[str, object]:
     if profile_name not in FLOW_PROFILES:
@@ -356,6 +358,25 @@ def get_profile_movement_params(profile_name: str, section_type: str) -> Dict[st
         return movement["horizontal"]  # type: ignore[return-value]
 
     raise KeyError(f"Для профиля {profile_name} нет параметров движения для участка {section_type}")
+
+
+def resolve_section_type_for_profile(profile_name: str, section_type: str) -> str:
+    profile = get_profile(profile_name)
+    movement = profile.get("movement")
+    if not isinstance(movement, dict):
+        return section_type
+
+    if section_type in movement:
+        return section_type
+
+    fallback_key = SECTION_FALLBACK_MAP.get(section_type, "horizontal")
+    if fallback_key in movement:
+        return fallback_key
+
+    if "horizontal" in movement:
+        return "horizontal"
+
+    return section_type
 
 
 def get_profile_color(profile_name: str) -> str:
@@ -453,6 +474,10 @@ class PersonState:
     speed_mps: float = 0.0
     v0_mpm: float = 0.0
     d0: float = 0.0
+    ai: float = 0.0
+    m: float = 1.0
+    section_type: str = ""
+    speed_section_type: str = ""
     row_index: int = -1
     place_in_row: int = -1
     flow_index: int = -1
@@ -858,13 +883,19 @@ def compute_person_speed_stage1(person: Person, section: Segment) -> float:
     Для проема (door): m = 1.0 при D < 0.5, иначе m = 1.25 - 0.05 * D.
     Для остальных участков: m = 1.0.
     """
-    movement_params = get_profile_movement_params(person.group, section.section_type)
+    speed_components = compute_person_speed_components_stage1(person, section)
+    return speed_components["v_mps"]
+
+
+def compute_person_speed_components_stage1(person: Person, section: Segment) -> Dict[str, float | str]:
+    speed_section_type = resolve_section_type_for_profile(person.group, section.section_type)
+    movement_params = get_profile_movement_params(person.group, speed_section_type)
     v0_mpm = float(movement_params["V0"])  # м/мин
     ai = float(movement_params["ai"])
     d0 = float(movement_params["D0"])
     density = max(0.0, person.local_density)
     m = 1.0
-    if section.section_type == "door" and density >= 0.5:
+    if speed_section_type == "door" and density >= 0.5:
         m = 1.25 - 0.05 * density
 
     if density <= d0 or d0 <= 0.0:
@@ -873,8 +904,17 @@ def compute_person_speed_stage1(person: Person, section: Segment) -> float:
         v_mpm = v0_mpm * (1.0 - ai * math.log(density / d0)) * m
 
     v_mpm = max(0.0, v_mpm)
-    v_mps = v_mpm / 60.0
-    return v_mps
+    return {
+        "v_mpm": v_mpm,
+        "v_mps": v_mpm / 60.0,
+        "V0": v0_mpm,
+        "D0": d0,
+        "ai": ai,
+        "m": m,
+        "density": density,
+        "section_type": section.section_type,
+        "speed_section_type": speed_section_type,
+    }
 
 
 def update_person_local_density_on_sections(
@@ -998,7 +1038,22 @@ class SinglePersonSingleSegmentModel:
             if person.finished:
                 continue
             current_section = self.section_by_id(person.section_id)
-            person.v = compute_person_speed_stage1(person, current_section)
+            speed_components = compute_person_speed_components_stage1(person, current_section)
+            person.v = float(speed_components["v_mps"])
+            if person.pid == DEBUG_TRACE_PID:
+                print(
+                    "[pid=1 speed_trace] "
+                    f"group={person.group} "
+                    f"section_type={speed_components['section_type']} "
+                    f"speed_section_type={speed_components['speed_section_type']} "
+                    f"local_density={person.local_density:.6f} "
+                    f"flow_density={person.flow_density:.6f} "
+                    f"V0={float(speed_components['V0']):.6f} "
+                    f"D0={float(speed_components['D0']):.6f} "
+                    f"ai={float(speed_components['ai']):.6f} "
+                    f"m={float(speed_components['m']):.6f} "
+                    f"v={person.v:.6f}"
+                )
             person.x = original_x_by_pid.get(person.pid, person.x)
 
         for person in self.people:
@@ -1075,12 +1130,20 @@ def build_snapshot(model: SinglePersonSingleSegmentModel, snapshot_time: Optiona
     for person in model.people:
         if not person.finished and person.section_id in model.sections:
             section = model.sections[person.section_id]
-            movement_params = get_profile_movement_params(person.group, section.section_type)
-            v0_mpm = float(movement_params["V0"])
-            d0 = float(movement_params["D0"])
+            speed_components = compute_person_speed_components_stage1(person, section)
+            v0_mpm = float(speed_components["V0"])
+            d0 = float(speed_components["D0"])
+            ai = float(speed_components["ai"])
+            m = float(speed_components["m"])
+            section_type = str(speed_components["section_type"])
+            speed_section_type = str(speed_components["speed_section_type"])
         else:
             v0_mpm = 0.0
             d0 = 0.0
+            ai = 0.0
+            m = 1.0
+            section_type = ""
+            speed_section_type = ""
 
         people_state.append(
             PersonState(
@@ -1092,6 +1155,10 @@ def build_snapshot(model: SinglePersonSingleSegmentModel, snapshot_time: Optiona
                 speed_mps=person.v,
                 v0_mpm=v0_mpm,
                 d0=d0,
+                ai=ai,
+                m=m,
+                section_type=section_type,
+                speed_section_type=speed_section_type,
                 row_index=person.row_index,
                 place_in_row=person.place_in_row,
                 flow_index=person.flow_index,
@@ -1131,15 +1198,23 @@ def build_step_payload(model: SinglePersonSingleSegmentModel, step: int) -> Dict
     people_payload = []
     for person in sorted(model.people, key=lambda current: current.pid):
         if not person.finished and person.section_id in model.sections:
-            movement_params = get_profile_movement_params(
-                person.group,
-                model.sections[person.section_id].section_type,
+            speed_components = compute_person_speed_components_stage1(
+                person,
+                model.sections[person.section_id],
             )
-            v0_mpm = float(movement_params["V0"])
-            d0 = float(movement_params["D0"])
+            v0_mpm = float(speed_components["V0"])
+            d0 = float(speed_components["D0"])
+            ai = float(speed_components["ai"])
+            m = float(speed_components["m"])
+            section_type = str(speed_components["section_type"])
+            speed_section_type = str(speed_components["speed_section_type"])
         else:
             v0_mpm = 0.0
             d0 = 0.0
+            ai = 0.0
+            m = 1.0
+            section_type = ""
+            speed_section_type = ""
 
         people_payload.append(
             {
@@ -1151,6 +1226,10 @@ def build_step_payload(model: SinglePersonSingleSegmentModel, step: int) -> Dict
                 "speed_mps": person.v,
                 "v0_mpm": v0_mpm,
                 "d0": d0,
+                "ai": ai,
+                "m": m,
+                "section_type": section_type,
+                "speed_section_type": speed_section_type,
                 "x_raw": person.x_raw,
                 "finished": person.finished,
                 "exit_time": person.exit_time,
