@@ -49,8 +49,8 @@ FLOW_PROFILES: Dict[str, Dict[str, object]] = {
         "label": "Люди трудоспособного возраста (18–60 лет)",
         "mobility_group": "M0",
         "geometry_source": "normative_P2.5",
-        "a_geom": 0.46,
-        "c_geom": 0.28,
+        "a_geom": 0.28,
+        "c_geom": 0.46,
         "f": 0.10,
         "movement": {
             "horizontal":  {"V0": 100.0, "ai": 0.295, "D0": 0.51},
