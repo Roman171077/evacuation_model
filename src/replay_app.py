@@ -30,6 +30,12 @@ class ReplayData:
     history: List[Snapshot]
 
 
+def _compute_m(section_type: str, density: float) -> float:
+    if section_type == "door" and density >= 0.5:
+        return 1.25 - 0.05 * density
+    return 1.0
+
+
 def _to_person_state(agent_payload: Dict[str, object]) -> PersonState:
     return PersonState(
         pid=int(agent_payload.get("pid", 0)),
@@ -194,6 +200,8 @@ def _build_flow_membership_rows(snapshot: Snapshot, sections: Dict[str, Segment]
         section_people.sort(key=lambda person: (person.flow_index < 0, person.flow_index, person.place_in_flow, person.x, person.pid))
 
         for person in section_people:
+            section_type = sections[sid].section_type
+            m = _compute_m(section_type, max(0.0, person.local_density))
             other_flow_people = (
                 ", ".join(str(pid) for pid in person.other_flow_people_ids)
                 if person.other_flow_people_ids
@@ -206,6 +214,10 @@ def _build_flow_membership_rows(snapshot: Snapshot, sections: Dict[str, Segment]
                     "flow": f"F{person.flow_index}" if person.flow_index >= 0 else "—",
                     "status": "в потоке" if person.flow_index >= 0 else "вне потока",
                     "x, м": f"{person.x:.2f}",
+                    "speed_mps": f"{person.speed_mps:.3f}",
+                    "v0_mpm": f"{person.v0_mpm:.1f}",
+                    "d0": f"{person.d0:.3f}",
+                    "m": f"{m:.3f}",
                     "D потока, м²/м²": f"{person.flow_density:.3f}",
                     "pid других людей в потоке": other_flow_people,
                 }
