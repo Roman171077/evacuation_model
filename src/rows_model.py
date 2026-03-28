@@ -499,7 +499,6 @@ class Snapshot:
     section_counts: Dict[str, int]
     finished_count: int
     total_people: int
-    section_densities: Dict[str, float] = field(default_factory=dict)
 
 
 
@@ -930,46 +929,29 @@ def update_person_local_density_on_sections(
         person.local_density = 0.0
 
     for sid, data in state.items():
-        del data
         section = sections[sid]
-        if section.width <= 1e-9 or section.length <= 1e-9:
+        if section.width <= 1e-9:
             continue
 
-        section_people = [
-            person
-            for person in people
-            if not person.finished and person.section_id == sid
-        ]
-        if not section_people:
-            continue
+        flows = data["flows"]
+        assert isinstance(flows, list)
+        for flow in flows:
+            if not isinstance(flow, Flow):
+                continue
+            if len(flow.people) < 2:
+                continue
+            if flow.delta_x <= 1e-9:
+                continue
 
-        density = max(0.0, sum(person.f for person in section_people) / (section.length * section.width))
-        for person in section_people:
-            person.flow_density = density
-            person.local_density = density
+            area_sum_all = sum(other.f for other in flow.people)
+            denominator = section.width * flow.delta_x
+            for person in flow.people:
+                area_sum_other = area_sum_all - person.f
+                density = max(0.0, area_sum_other / denominator)
+                person.flow_density = density
+                person.local_density = density
 
     return state
-
-
-def compute_section_densities(people: List[Person], sections: Dict[str, Segment]) -> Dict[str, float]:
-    densities: Dict[str, float] = {sid: 0.0 for sid in sections.keys()}
-    for sid, section in sections.items():
-        if section.width <= 1e-9 or section.length <= 1e-9:
-            densities[sid] = 0.0
-            continue
-
-        section_people = [
-            person
-            for person in people
-            if not person.finished and person.section_id == sid
-        ]
-        if not section_people:
-            densities[sid] = 0.0
-            continue
-
-        densities[sid] = max(0.0, sum(person.f for person in section_people) / (section.length * section.width))
-
-    return densities
 
 
 def apply_row_geometry_on_sections(people: List[Person], sections: Dict[str, Segment]) -> None:
@@ -1197,13 +1179,11 @@ def build_snapshot(model: SinglePersonSingleSegmentModel, snapshot_time: Optiona
     for person in model.people:
         if not person.finished and person.section_id in section_counts:
             section_counts[person.section_id] += 1
-    section_densities = compute_section_densities(model.people, model.sections)
 
     return Snapshot(
         time=round(model.time if snapshot_time is None else snapshot_time, 3),
         people=people_state,
         section_counts=section_counts,
-        section_densities=section_densities,
         finished_count=sum(1 for person in model.people if person.finished),
         total_people=len(model.people),
     )
@@ -1274,7 +1254,6 @@ def build_step_payload(model: SinglePersonSingleSegmentModel, step: int) -> Dict
 
     finished_count = sum(1 for person in model.people if person.finished)
     total_people = len(model.people)
-    section_densities = compute_section_densities(model.people, model.sections)
     return {
         "step": step,
         "time": round(model.time, 3),
@@ -1284,7 +1263,6 @@ def build_step_payload(model: SinglePersonSingleSegmentModel, step: int) -> Dict
             "total_people": total_people,
             "remaining_count": total_people - finished_count,
             "section_counts": section_counts,
-            "section_densities": section_densities,
         },
     }
 
@@ -1434,7 +1412,6 @@ def build_replay_history_payload(
                     "total_people": snapshot.total_people,
                     "remaining_count": snapshot.total_people - snapshot.finished_count,
                     "section_counts": snapshot.section_counts,
-                    "section_densities": snapshot.section_densities,
                 },
             }
         )

@@ -112,7 +112,6 @@ def _load_json_history(history_path: str) -> ReplayData:
                 section_counts=dict(stats.get("section_counts", {})),
                 finished_count=int(stats.get("finished_count", 0)),
                 total_people=int(stats.get("total_people", len(people))),
-                section_densities={k: float(v) for k, v in dict(stats.get("section_densities", {})).items()},
             )
         )
 
@@ -135,7 +134,6 @@ def _load_jsonl_history(steps_path: str, meta_path: str) -> ReplayData:
                     section_counts=dict(stats.get("section_counts", {})),
                     finished_count=int(stats.get("finished_count", 0)),
                     total_people=int(stats.get("total_people", len(people))),
-                    section_densities={k: float(v) for k, v in dict(stats.get("section_densities", {})).items()},
                 )
             )
 
@@ -425,12 +423,6 @@ def main() -> None:
             st.json(snapshot.section_counts)
         else:
             st.write("Нет активных людей на участках.")
-
-    with st.expander("Плотность Dvj(t) по участкам"):
-        if snapshot.section_densities:
-            st.json({sid: round(value, 6) for sid, value in snapshot.section_densities.items()})
-        else:
-            st.write("Нет данных по плотности участков.")
 
     with st.expander("Локальные потоки и одиночные люди"):
         flow_rows = _build_flow_membership_rows(snapshot, replay_data.sections)
