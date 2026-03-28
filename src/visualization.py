@@ -326,7 +326,7 @@ def draw_people(ax: plt.Axes, snapshot: Snapshot, sections: Dict[str, Segment], 
 
 
 def build_flow_summary_lines(snapshot: Snapshot, sections: Dict[str, Segment]) -> List[str]:
-    flow_members_by_section: Dict[str, Dict[int, List[Tuple[int, int, float]]]] = {
+    flow_members_by_section: Dict[str, Dict[int, List[Tuple[int, int, float, List[int]]]]] = {
         sid: {} for sid in sections.keys()
     }
     outside_flow_by_section: Dict[str, List[Tuple[int, float]]] = {sid: [] for sid in sections.keys()}
@@ -339,7 +339,14 @@ def build_flow_summary_lines(snapshot: Snapshot, sections: Dict[str, Segment]) -
 
         if person.flow_index >= 0:
             section_flows = flow_members_by_section[person.section_id]
-            section_flows.setdefault(person.flow_index, []).append((person.place_in_flow, person.pid, person.x))
+            section_flows.setdefault(person.flow_index, []).append(
+                (
+                    person.place_in_flow,
+                    person.pid,
+                    person.x,
+                    list(person.other_flow_people_ids),
+                )
+            )
             continue
 
         outside_flow_by_section[person.section_id].append((person.pid, person.x))
@@ -359,14 +366,19 @@ def build_flow_summary_lines(snapshot: Snapshot, sections: Dict[str, Segment]) -
             lines.append("  В потоке:")
             for flow_index in sorted(section_flows.keys()):
                 ordered_people = [
-                    (pid, x_coord)
-                    for _place, pid, x_coord in sorted(
+                    (pid, x_coord, other_flow_people_ids)
+                    for _place, pid, x_coord, other_flow_people_ids in sorted(
                         section_flows[flow_index],
                         key=lambda item: (item[0], item[1]),
                     )
                 ]
                 flow_members = ", ".join(
-                    f"pid={pid} (x={x_coord:.2f} м)" for pid, x_coord in ordered_people
+                    (
+                        f"pid={pid} (x={x_coord:.2f} м, другие в потоке="
+                        f"{', '.join(str(other_pid) for other_pid in peers) if peers else '—'})"
+                    )
+                    for pid, x_coord, other_flow_people_ids in ordered_people
+                    for peers in [other_flow_people_ids or [other_pid for other_pid, _, _ in ordered_people if other_pid != pid]]
                 )
                 lines.append(f"    F{flow_index}: {flow_members}")
         else:
