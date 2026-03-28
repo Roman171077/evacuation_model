@@ -35,6 +35,7 @@ from src.rows_model import (
     run_simulation_with_history,
     save_replay_history_json,
     write_step_replay_meta_json,
+    update_person_local_density_on_sections,
     update_people_position_state_on_sections,
     update_rows_and_flows_on_sections,
 )
@@ -102,6 +103,7 @@ __all__ = [
     'save_replay_history_json',
     'show_realtime_evacuation',
     'write_step_replay_meta_json',
+    'update_person_local_density_on_sections',
     'update_people_position_state_on_sections',
     'update_rows_and_flows_on_sections',
 ]
