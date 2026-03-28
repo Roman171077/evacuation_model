@@ -849,22 +849,28 @@ def compute_person_speed_stage1(person: Person, section: Segment) -> float:
     """
     Скорость зависит от локальной плотности по инженерной формуле:
     V = V0, если D <= D0
-    V = V0 * (1 - ai * ln(D / D0)), если D > D0
+    V = V0 * (1 - ai * ln(D / D0)) * m, если D > D0
     где D = local_density.
+    Для проема (door): m = 1.0 при D < 0.5, иначе m = 1.25 - 0.05 * D.
+    Для остальных участков: m = 1.0.
     """
     movement_params = get_profile_movement_params(person.group, section.section_type)
     v0_mpm = float(movement_params["V0"])  # м/мин
     ai = float(movement_params["ai"])
     d0 = float(movement_params["D0"])
     density = max(0.0, person.local_density)
+    m = 1.0
+    if section.section_type == "door" and density >= 0.5:
+        m = 1.25 - 0.05 * density
 
     if density <= d0 or d0 <= 0.0:
         v_mpm = v0_mpm
     else:
-        v_mpm = v0_mpm * (1.0 - ai * math.log(density / d0))
+        v_mpm = v0_mpm * (1.0 - ai * math.log(density / d0)) * m
 
+    v_mpm = max(0.0, v_mpm)
     v_mps = v_mpm / 60.0
-    return max(0.01, v_mps)
+    return v_mps
 
 
 def update_person_local_density_on_sections(
