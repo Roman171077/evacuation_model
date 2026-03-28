@@ -9,7 +9,14 @@ from typing import Dict, List
 import plotly.graph_objects as go
 import streamlit as st
 
-from src.rows_model import Person, PersonState, Segment, Snapshot, update_rows_and_flows_on_sections
+from src.rows_model import (
+    Person,
+    PersonState,
+    Segment,
+    Snapshot,
+    update_person_local_density_on_sections,
+    update_rows_and_flows_on_sections,
+)
 from src.visualization import (
     SectionVisual,
     build_section_layout_simple,
@@ -37,6 +44,8 @@ def _to_person_state(agent_payload: Dict[str, object]) -> PersonState:
         flow_start_x=float(agent_payload.get("flow_start_x", 0.0)),
         flow_end_x=float(agent_payload.get("flow_end_x", 0.0)),
         flow_delta_x=float(agent_payload.get("flow_delta_x", 0.0)),
+        flow_density=float(agent_payload.get("flow_density", 0.0)),
+        local_density=float(agent_payload.get("local_density", 0.0)),
         other_flow_people_ids=[int(pid) for pid in agent_payload.get("other_flow_people_ids", [])],  # type: ignore[arg-type]
         finished=bool(agent_payload.get("finished", False)),
         exit_time=float(agent_payload["exit_time"]) if agent_payload.get("exit_time") is not None else None,
@@ -133,7 +142,8 @@ def _recompute_snapshot_position_state(snapshot: Snapshot, sections: Dict[str, S
     ]
 
     if active_people:
-        update_rows_and_flows_on_sections(active_people, sections)
+        section_state = update_rows_and_flows_on_sections(active_people, sections)
+        update_person_local_density_on_sections(active_people, sections, section_state)
 
     state_by_pid = {person.pid: person for person in active_people}
     for person_state in snapshot.people:
@@ -146,6 +156,8 @@ def _recompute_snapshot_position_state(snapshot: Snapshot, sections: Dict[str, S
             person_state.flow_start_x = 0.0
             person_state.flow_end_x = 0.0
             person_state.flow_delta_x = 0.0
+            person_state.flow_density = 0.0
+            person_state.local_density = 0.0
             person_state.other_flow_people_ids = []
             continue
 
@@ -156,6 +168,8 @@ def _recompute_snapshot_position_state(snapshot: Snapshot, sections: Dict[str, S
         person_state.flow_start_x = source.flow_start_x
         person_state.flow_end_x = source.flow_end_x
         person_state.flow_delta_x = source.flow_delta_x
+        person_state.flow_density = source.flow_density
+        person_state.local_density = source.local_density
         person_state.other_flow_people_ids = list(source.other_flow_people_ids)
 
 
@@ -189,6 +203,7 @@ def _build_flow_membership_rows(snapshot: Snapshot, sections: Dict[str, Segment]
                     "flow": f"F{person.flow_index}" if person.flow_index >= 0 else "—",
                     "status": "в потоке" if person.flow_index >= 0 else "вне потока",
                     "x, м": f"{person.x:.2f}",
+                    "D потока, м²/м²": f"{person.flow_density:.3f}",
                     "pid других людей в потоке": other_flow_people,
                 }
             )
@@ -261,7 +276,8 @@ def build_frame_figure(
                 "pid=%{customdata[0]}<br>section=%{customdata[1]}"
                 "<br>row=%{customdata[2]} place=%{customdata[3]}"
                 "<br>flow=%{customdata[4]} place=%{customdata[5]}"
-                "<br>другие pid в потоке=%{customdata[6]}<extra></extra>"
+                "<br>D потока=%{customdata[6]:.3f}"
+                "<br>другие pid в потоке=%{customdata[7]}<extra></extra>"
             ),
             customdata=[
                 [
@@ -271,6 +287,7 @@ def build_frame_figure(
                     placement.place_in_row,
                     person_state_by_pid[placement.pid].flow_index,
                     person_state_by_pid[placement.pid].place_in_flow,
+                    person_state_by_pid[placement.pid].flow_density,
                     (", ".join(str(pid) for pid in person_state_by_pid[placement.pid].other_flow_people_ids)
                      if person_state_by_pid[placement.pid].other_flow_people_ids
                      else "—"),
