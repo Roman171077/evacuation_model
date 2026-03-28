@@ -270,10 +270,16 @@ class MainRowBuildingTests(unittest.TestCase):
             total_people=3,
         )
 
-        self.assertEqual(
-            build_flow_summary_lines(snapshot, {"horizontal_1": section}),
-            ["Потоки по участкам:", "horizontal_1:", "  F0: 1, 2, 3"],
-        )
+        lines = build_flow_summary_lines(snapshot, {"horizontal_1": section})
+        self.assertEqual(lines[0], "Локальные потоки и одиночные люди по участкам:")
+        self.assertEqual(lines[1], "horizontal_1:")
+        self.assertEqual(lines[2], "  В потоке:")
+        self.assertIn("pid=1", lines[3])
+        self.assertIn("другие в потоке=2, 3", lines[3])
+        self.assertIn("pid=2", lines[3])
+        self.assertIn("другие в потоке=1, 3", lines[3])
+        self.assertIn("pid=3", lines[3])
+        self.assertIn("другие в потоке=1, 2", lines[3])
 
     def test_flow_summary_lines_show_dash_when_section_has_no_flow(self):
         sections = {
@@ -307,7 +313,14 @@ class MainRowBuildingTests(unittest.TestCase):
 
         self.assertEqual(
             build_flow_summary_lines(snapshot, sections),
-            ["Потоки по участкам:", "horizontal_1: —", "horizontal_2: —"],
+            [
+                "Локальные потоки и одиночные люди по участкам:",
+                "horizontal_1:",
+                "  В потоке:",
+                "    F0: pid=1 (x=5.00 м, другие в потоке=2), pid=2 (x=5.05 м, другие в потоке=1)",
+                "  Вне потока: —",
+                "horizontal_2: —",
+            ],
         )
 
     def test_position_state_for_consecutive_rows_forming_flow(self):
