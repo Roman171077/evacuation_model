@@ -71,6 +71,7 @@ class PersonVisualPlacement:
     label: str
     row_index: int
     place_in_row: int
+    flow_density: float
 
 
 def require_matplotlib() -> None:
@@ -279,6 +280,7 @@ def compute_snapshot_visual_placements(
                     label=f"{person.pid}",
                     row_index=row_index,
                     place_in_row=place_in_row,
+                    flow_density=0.0 if person_state is None else person_state.flow_density,
                 )
             )
 
@@ -323,10 +325,20 @@ def draw_people(ax: plt.Axes, snapshot: Snapshot, sections: Dict[str, Segment], 
             color="#111111",
             zorder=11,
         )
+        ax.text(
+            placement.center[0],
+            placement.center[1] - max(0.18, placement.width_m * 0.8),
+            f"D={placement.flow_density:.2f}",
+            ha="center",
+            va="top",
+            fontsize=6,
+            color="#111111",
+            zorder=11,
+        )
 
 
 def build_flow_summary_lines(snapshot: Snapshot, sections: Dict[str, Segment]) -> List[str]:
-    flow_members_by_section: Dict[str, Dict[int, List[Tuple[int, int, float, List[int]]]]] = {
+    flow_members_by_section: Dict[str, Dict[int, List[Tuple[int, int, float, float, List[int]]]]] = {
         sid: {} for sid in sections.keys()
     }
     outside_flow_by_section: Dict[str, List[Tuple[int, float]]] = {sid: [] for sid in sections.keys()}
@@ -344,6 +356,7 @@ def build_flow_summary_lines(snapshot: Snapshot, sections: Dict[str, Segment]) -
                     person.place_in_flow,
                     person.pid,
                     person.x,
+                    person.flow_density,
                     list(person.other_flow_people_ids),
                 )
             )
@@ -366,19 +379,22 @@ def build_flow_summary_lines(snapshot: Snapshot, sections: Dict[str, Segment]) -
             lines.append("  В потоке:")
             for flow_index in sorted(section_flows.keys()):
                 ordered_people = [
-                    (pid, x_coord, other_flow_people_ids)
-                    for _place, pid, x_coord, other_flow_people_ids in sorted(
+                    (pid, x_coord, flow_density, other_flow_people_ids)
+                    for _place, pid, x_coord, flow_density, other_flow_people_ids in sorted(
                         section_flows[flow_index],
                         key=lambda item: (item[0], item[1]),
                     )
                 ]
                 flow_members = ", ".join(
                     (
-                        f"pid={pid} (x={x_coord:.2f} м, другие в потоке="
+                        f"pid={pid} (x={x_coord:.2f} м, D={flow_density:.3f}, другие в потоке="
                         f"{', '.join(str(other_pid) for other_pid in peers) if peers else '—'})"
                     )
-                    for pid, x_coord, other_flow_people_ids in ordered_people
-                    for peers in [other_flow_people_ids or [other_pid for other_pid, _, _ in ordered_people if other_pid != pid]]
+                    for pid, x_coord, flow_density, other_flow_people_ids in ordered_people
+                    for peers in [
+                        other_flow_people_ids
+                        or [other_pid for other_pid, _, _, _ in ordered_people if other_pid != pid]
+                    ]
                 )
                 lines.append(f"    F{flow_index}: {flow_members}")
         else:

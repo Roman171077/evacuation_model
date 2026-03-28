@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import asdict, dataclass, field
 from typing import Dict, List, Optional, Tuple
 
@@ -399,6 +400,8 @@ class Person:
     flow_start_x: float = 0.0
     flow_end_x: float = 0.0
     flow_delta_x: float = 0.0
+    flow_density: float = 0.0
+    local_density: float = 0.0
     other_flow_people_ids: List[int] = field(default_factory=list)
     is_row_candidate: bool = False
     can_fit_in_row: bool = False
@@ -454,6 +457,8 @@ class PersonState:
     flow_start_x: float = 0.0
     flow_end_x: float = 0.0
     flow_delta_x: float = 0.0
+    flow_density: float = 0.0
+    local_density: float = 0.0
     other_flow_people_ids: List[int] = field(default_factory=list)
     finished: bool = False
     exit_time: Optional[float] = None
@@ -509,6 +514,8 @@ def reset_person_position_state(person: Person) -> None:
     person.flow_start_x = 0.0
     person.flow_end_x = 0.0
     person.flow_delta_x = 0.0
+    person.flow_density = 0.0
+    person.local_density = 0.0
     person.other_flow_people_ids = []
     person.is_row_candidate = False
     person.can_fit_in_row = False
@@ -758,6 +765,8 @@ def update_person_position_state(
         person.flow_start_x = 0.0
         person.flow_end_x = 0.0
         person.flow_delta_x = 0.0
+        person.flow_density = 0.0
+        person.local_density = 0.0
         person.other_flow_people_ids = []
 
     if not is_single_person_on_section:
@@ -835,14 +844,61 @@ def compute_person_row_centers(row: Row, section: Segment) -> Dict[int, float]:
 
 def compute_person_speed_stage1(person: Person, section: Segment) -> float:
     """
-    На этапе 1 скорость постоянная:
-    V_i_t = V0 / 60
-    где V0 берется из таблицы профиля для данного типа участка.
+    Скорость зависит от локальной плотности по инженерной формуле:
+    V = V0, если D <= D0
+    V = V0 * (1 - ai * ln(D / D0)), если D > D0
+    где D = local_density.
     """
     movement_params = get_profile_movement_params(person.group, section.section_type)
     v0_mpm = float(movement_params["V0"])  # м/мин
-    v_mps = v0_mpm / 60.0                  # м/с
+    ai = float(movement_params["ai"])
+    d0 = float(movement_params["D0"])
+    density = max(0.0, person.local_density)
+
+    if density <= d0 or d0 <= 0.0:
+        v_mpm = v0_mpm
+    else:
+        v_mpm = v0_mpm * (1.0 - ai * math.log(density / d0))
+
+    v_mps = v_mpm / 60.0
     return max(0.01, v_mps)
+
+
+def update_person_local_density_on_sections(
+    people: List[Person],
+    sections: Dict[str, Segment],
+    section_state: Optional[Dict[str, Dict[str, List[Row] | List[Flow]]]] = None,
+) -> Dict[str, Dict[str, List[Row] | List[Flow]]]:
+    state = section_state if section_state is not None else update_rows_and_flows_on_sections(people, sections)
+
+    for person in people:
+        person.flow_density = 0.0
+        person.local_density = 0.0
+
+    for sid, data in state.items():
+        section = sections[sid]
+        if section.width <= 1e-9:
+            continue
+
+        flows = data["flows"]
+        assert isinstance(flows, list)
+        for flow in flows:
+            if not isinstance(flow, Flow):
+                continue
+            if len(flow.people) < 2:
+                continue
+            if flow.delta_x <= 1e-9:
+                continue
+
+            area_sum_all = sum(other.f for other in flow.people)
+            denominator = section.width * flow.delta_x
+            for person in flow.people:
+                area_sum_other = area_sum_all - person.f
+                density = max(0.0, area_sum_other / denominator)
+                person.flow_density = density
+                person.local_density = density
+
+    return state
 
 
 def apply_row_geometry_on_sections(people: List[Person], sections: Dict[str, Segment]) -> None:
@@ -875,7 +931,6 @@ class SinglePersonSingleSegmentModel:
 
     def _move_person(self, person: Person) -> None:
         current_section = self.section_by_id(person.section_id)
-        person.v = compute_person_speed_stage1(person, current_section)
         person.x_raw = person.x - person.v * self.params.dt
 
         if person.v <= 0:
@@ -911,8 +966,28 @@ class SinglePersonSingleSegmentModel:
 
     def step(self) -> None:
         """
-        Этап без плотности: только расчет скорости и перемещение.
+        Порядок шага:
+        1) обновление рядов/потоков,
+        2) расчет локальной плотности,
+        3) расчет скоростей,
+        4) перемещение.
         """
+        original_x_by_pid = {
+            person.pid: person.x
+            for person in self.people
+            if not person.finished
+        }
+
+        section_state = update_rows_and_flows_on_sections(self.people, self.sections)
+        update_person_local_density_on_sections(self.people, self.sections, section_state)
+
+        for person in self.people:
+            if person.finished:
+                continue
+            current_section = self.section_by_id(person.section_id)
+            person.v = compute_person_speed_stage1(person, current_section)
+            person.x = original_x_by_pid.get(person.pid, person.x)
+
         for person in self.people:
             if person.finished:
                 continue
@@ -997,6 +1072,8 @@ def build_snapshot(model: SinglePersonSingleSegmentModel, snapshot_time: Optiona
             flow_start_x=person.flow_start_x,
             flow_end_x=person.flow_end_x,
             flow_delta_x=person.flow_delta_x,
+            flow_density=person.flow_density,
+            local_density=person.local_density,
             other_flow_people_ids=list(person.other_flow_people_ids),
             finished=person.finished,
             exit_time=person.exit_time,
@@ -1045,6 +1122,8 @@ def build_step_payload(model: SinglePersonSingleSegmentModel, step: int) -> Dict
                 "flow_start_x": person.flow_start_x,
                 "flow_end_x": person.flow_end_x,
                 "flow_delta_x": person.flow_delta_x,
+                "flow_density": person.flow_density,
+                "local_density": person.local_density,
                 "other_flow_people_ids": list(person.other_flow_people_ids),
                 "is_alone_on_section": person.is_alone_on_section,
                 "is_single_in_row": person.is_single_in_row,
