@@ -1,5 +1,6 @@
 import unittest
 import json
+import math
 import os
 import tempfile
 from unittest.mock import patch
@@ -19,6 +20,7 @@ from main import (
     build_rows_on_section,
     build_section_layout_simple,
     compute_snapshot_visual_placements,
+    compute_person_speed_stage1,
     parse_cli_args,
     run_simulation_with_history,
     save_replay_history_json,
@@ -33,6 +35,36 @@ class MainRowBuildingTests(unittest.TestCase):
         with patch("sys.argv", ["main.py", "--mode", "replay"]):
             args = parse_cli_args()
         self.assertEqual(args.mode, "replay")
+
+    def test_compute_person_speed_stage1_uses_free_speed_when_density_not_above_d0(self):
+        person = Person(pid=1, group="M0_3", section_id="horizontal_1", x=5.0)
+        person.local_density = 0.51  # == D0 для M0_3 на horizontal
+        section = Segment("horizontal_1", "horizontal", length=10.0, width=1.0)
+
+        speed = compute_person_speed_stage1(person, section)
+
+        self.assertAlmostEqual(speed, 100.0 / 60.0, places=9)
+
+    def test_compute_person_speed_stage1_applies_log_branch_for_non_door(self):
+        person = Person(pid=2, group="M0_3", section_id="horizontal_1", x=5.0)
+        person.local_density = 1.0
+        section = Segment("horizontal_1", "horizontal", length=10.0, width=1.0)
+
+        speed = compute_person_speed_stage1(person, section)
+        expected_mpm = 100.0 * (1.0 - 0.295 * math.log(1.0 / 0.51))
+
+        self.assertAlmostEqual(speed, expected_mpm / 60.0, places=9)
+
+    def test_compute_person_speed_stage1_applies_door_m_coefficient_for_high_density(self):
+        person = Person(pid=3, group="M0_3", section_id="door_1", x=1.0)
+        person.local_density = 1.2
+        section = Segment("door_1", "door", length=1.0, width=1.0)
+
+        speed = compute_person_speed_stage1(person, section)
+        expected_m = 1.25 - 0.05 * 1.2
+        expected_mpm = 100.0 * (1.0 - 0.295 * math.log(1.2 / 0.65)) * expected_m
+
+        self.assertAlmostEqual(speed, expected_mpm / 60.0, places=9)
 
     def test_wheelchair_and_three_m0_3_are_split_into_two_rows(self):
         section = Segment("horizontal_1", "horizontal", length=12.0, width=2.0)
