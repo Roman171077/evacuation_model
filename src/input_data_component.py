@@ -13,7 +13,7 @@ from src.rows_model import (
 )
 
 
-ROWS_DEMO_SECTION_SPECS: tuple[dict[str, object], ...] = (
+ROWS_SECTION_SPECS: tuple[dict[str, object], ...] = (
     {
         'sid': 'horizontal_1',
         'section_type': 'horizontal',
@@ -60,16 +60,16 @@ ROWS_DEMO_PERSON_SPECS: tuple[dict[str, object], ...] = (
 )
 
 
-ROWS_DEMO_PARAMS = SimulationParams(dt=1.0, max_time=120.0)
+ROWS_PARAMS = SimulationParams(dt=1.0, max_time=120.0)
 
 
 def build_rows_demo_case() -> tuple[dict[str, Segment], list[Person], SimulationParams]:
     sections = {
         str(section_spec['sid']): Segment(**section_spec)
-        for section_spec in ROWS_DEMO_SECTION_SPECS
+        for section_spec in ROWS_SECTION_SPECS
     }
     people = [Person(**person_spec) for person_spec in ROWS_DEMO_PERSON_SPECS]
-    params = SimulationParams(dt=ROWS_DEMO_PARAMS.dt, max_time=ROWS_DEMO_PARAMS.max_time)
+    params = SimulationParams(dt=ROWS_PARAMS.dt, max_time=ROWS_PARAMS.max_time)
     return sections, people, params
 
 
