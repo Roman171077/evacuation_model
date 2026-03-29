@@ -90,51 +90,53 @@ def build_section_layout_simple(sections: Dict[str, Segment]) -> Dict[str, Secti
     if not sections:
         return {}
 
-    referenced_sections = {
-        next_sid
-        for section in sections.values()
-        for next_sid in section.outgoing_section_ids()
-        if next_sid in sections
-    }
-    roots = [sid for sid in sections.keys() if sid not in referenced_sections]
-    remaining = [sid for sid in sections.keys() if sid not in roots]
-    chains: List[List[str]] = []
-    visited: set[str] = set()
-
-    def append_chain(start_sid: str) -> None:
-        chain: List[str] = []
-        sid = start_sid
-        while sid not in visited and sid in sections:
-            visited.add(sid)
-            chain.append(sid)
-            outgoing = sections[sid].outgoing_section_ids()
-            next_sid = outgoing[0] if outgoing else None
-            if next_sid is None or next_sid not in sections:
-                break
-            sid = next_sid
-        if chain:
-            chains.append(chain)
-
-    for sid in roots:
-        append_chain(sid)
-
-    for sid in remaining:
-        append_chain(sid)
-
     layout: Dict[str, SectionVisual] = {}
     base_y = 4.0
-    chain_gap_y = 4.0
+    branch_gap_y = 4.0
+    next_y_index = 0
+    placement_stack: set[str] = set()
 
-    for chain_index, chain in enumerate(chains):
-        cursor_x = 0.0
-        y = base_y + chain_index * chain_gap_y
-        for sid in chain:
-            section = sections[sid]
-            layout[sid] = SectionVisual(
-                start=(cursor_x, y),
-                end=(cursor_x + section.length, y),
-            )
-            cursor_x += section.length
+    incoming_count: Dict[str, int] = {sid: 0 for sid in sections.keys()}
+    for section in sections.values():
+        for next_sid in section.outgoing_section_ids():
+            if next_sid in incoming_count:
+                incoming_count[next_sid] += 1
+
+    roots = [sid for sid, count in incoming_count.items() if count == 0]
+    traversal_order = roots + [sid for sid in sections.keys() if sid not in roots]
+
+    def place_section(sid: str, start_x: float) -> float:
+        nonlocal next_y_index
+        if sid in layout:
+            return layout[sid].start[1]
+        if sid in placement_stack:
+            y = base_y + next_y_index * branch_gap_y
+            next_y_index += 1
+            length = sections[sid].length
+            layout[sid] = SectionVisual(start=(start_x, y), end=(start_x + length, y))
+            return y
+
+        placement_stack.add(sid)
+        section = sections[sid]
+        outgoing = [next_sid for next_sid in section.outgoing_section_ids() if next_sid in sections]
+        child_ys: List[float] = []
+        next_start_x = start_x + section.length
+        for next_sid in outgoing:
+            child_ys.append(place_section(next_sid, next_start_x))
+
+        if child_ys:
+            y = sum(child_ys) / len(child_ys)
+        else:
+            y = base_y + next_y_index * branch_gap_y
+            next_y_index += 1
+
+        layout[sid] = SectionVisual(start=(start_x, y), end=(start_x + section.length, y))
+        placement_stack.remove(sid)
+        return y
+
+    for sid in traversal_order:
+        if sid not in layout:
+            place_section(sid, 0.0)
 
     return layout
 

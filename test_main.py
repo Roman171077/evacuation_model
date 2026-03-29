@@ -6,7 +6,8 @@ import tempfile
 from unittest.mock import patch
 
 from src.visualization import build_flow_summary_lines
-from src.replay_app import _build_flow_membership_rows
+from src.replay_app import _build_flow_membership_rows, _load_json_history, _load_sections_from_meta
+from src.rows_model import build_replay_history_payload
 from main import (
     Person,
     PersonState,
@@ -24,6 +25,7 @@ from main import (
     parse_cli_args,
     run_simulation_with_history,
     save_replay_history_json,
+    write_step_replay_meta_json,
     update_person_local_density_on_sections,
     update_people_position_state_on_sections,
     update_rows_and_flows_on_sections,
@@ -688,6 +690,154 @@ class MainRowBuildingTests(unittest.TestCase):
         self.assertEqual(layout["horizontal_1"].end, (12.0, 4.0))
         self.assertEqual(layout["horizontal_2"].start, (12.0, 4.0))
         self.assertEqual(layout["horizontal_2"].end, (20.0, 4.0))
+
+    def test_build_section_layout_simple_supports_segment_level_branching(self):
+        sections = {
+            "segment_1": Segment(
+                "segment_1",
+                "horizontal",
+                length=12.0,
+                width=2.0,
+                next_by_group={"M4_WHEELCHAIR": "wheel_branch"},
+                next_default="default_branch",
+            ),
+            "wheel_branch": Segment("wheel_branch", "ramp_down", length=6.0, width=2.0),
+            "default_branch": Segment("default_branch", "horizontal", length=8.0, width=2.0),
+        }
+
+        layout = build_section_layout_simple(sections)
+
+        self.assertEqual(layout["segment_1"].start[0], 0.0)
+        self.assertEqual(layout["segment_1"].end[0], 12.0)
+        self.assertEqual(layout["wheel_branch"].start[0], 12.0)
+        self.assertEqual(layout["default_branch"].start[0], 12.0)
+        self.assertNotEqual(layout["wheel_branch"].start[1], layout["default_branch"].start[1])
+        min_branch_y = min(layout["wheel_branch"].start[1], layout["default_branch"].start[1])
+        max_branch_y = max(layout["wheel_branch"].start[1], layout["default_branch"].start[1])
+        self.assertGreater(layout["segment_1"].start[1], min_branch_y)
+        self.assertLess(layout["segment_1"].start[1], max_branch_y)
+
+    def test_segment_routing_sends_wheelchair_to_special_branch(self):
+        segment = Segment(
+            "segment_1",
+            "horizontal",
+            length=10.0,
+            width=2.0,
+            next_by_group={"M4_WHEELCHAIR": "wheel_branch"},
+            next_default="default_branch",
+        )
+        self.assertEqual(segment.resolve_next_section_id("M4_WHEELCHAIR"), "wheel_branch")
+
+    def test_segment_routing_sends_other_groups_to_default_branch(self):
+        segment = Segment(
+            "segment_1",
+            "horizontal",
+            length=10.0,
+            width=2.0,
+            next_by_group={"M4_WHEELCHAIR": "wheel_branch"},
+            next_default="default_branch",
+        )
+        self.assertEqual(segment.resolve_next_section_id("M0_3"), "default_branch")
+
+    def test_routing_round_trip_via_meta_and_history_supports_new_and_old_schema(self):
+        sections = {
+            "segment_1": Segment(
+                "segment_1",
+                "horizontal",
+                length=12.0,
+                width=2.0,
+                next_by_group={"M4_WHEELCHAIR": "wheel_branch"},
+                next_default="default_branch",
+            ),
+            "wheel_branch": Segment("wheel_branch", "ramp_down", length=6.0, width=2.0),
+            "default_branch": Segment("default_branch", "horizontal", length=8.0, width=2.0),
+        }
+        history = [
+            Snapshot(
+                time=0.0,
+                people=[PersonState(pid=1, group="M0_3", section_id="segment_1", x=10.0, finished=False, exit_time=None)],
+                section_counts={"segment_1": 1},
+                finished_count=0,
+                total_people=1,
+            )
+        ]
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            meta_path = os.path.join(temp_dir, "meta.json")
+            history_path = os.path.join(temp_dir, "history.json")
+            old_meta_path = os.path.join(temp_dir, "meta_old.json")
+            old_history_path = os.path.join(temp_dir, "history_old.json")
+
+            write_step_replay_meta_json(
+                sections=sections,
+                dt=0.1,
+                step_count=1,
+                people_count=1,
+                output_path=meta_path,
+            )
+            with open(meta_path, "r", encoding="utf-8") as meta_file:
+                meta_payload = json.load(meta_file)
+            self.assertIn("routing", meta_payload["sections"][0])
+            self.assertNotIn("next_section_id", meta_payload["sections"][0])
+
+            loaded_meta_sections = _load_sections_from_meta(meta_path)
+            self.assertEqual(
+                loaded_meta_sections["segment_1"].resolve_next_section_id("M4_WHEELCHAIR"),
+                "wheel_branch",
+            )
+            self.assertEqual(
+                loaded_meta_sections["segment_1"].resolve_next_section_id("M0_3"),
+                "default_branch",
+            )
+
+            history_payload = build_replay_history_payload(sections, history)
+            with open(history_path, "w", encoding="utf-8") as history_file:
+                json.dump(history_payload, history_file, ensure_ascii=False, indent=2)
+
+            replay_data = _load_json_history(history_path)
+            self.assertEqual(
+                replay_data.sections["segment_1"].resolve_next_section_id("M4_WHEELCHAIR"),
+                "wheel_branch",
+            )
+            self.assertEqual(
+                replay_data.sections["segment_1"].resolve_next_section_id("M0_3"),
+                "default_branch",
+            )
+
+            legacy_sections_payload = [
+                {
+                    "sid": "segment_1",
+                    "section_type": "horizontal",
+                    "length": 12.0,
+                    "width": 2.0,
+                    "next_section_id": "default_branch",
+                    "next_by_group": {"M4_WHEELCHAIR": "wheel_branch"},
+                    "next_default": "default_branch",
+                },
+                {
+                    "sid": "wheel_branch",
+                    "section_type": "ramp_down",
+                    "length": 6.0,
+                    "width": 2.0,
+                },
+                {
+                    "sid": "default_branch",
+                    "section_type": "horizontal",
+                    "length": 8.0,
+                    "width": 2.0,
+                },
+            ]
+            with open(old_meta_path, "w", encoding="utf-8") as meta_file:
+                json.dump({"sections": legacy_sections_payload}, meta_file, ensure_ascii=False, indent=2)
+            old_sections = _load_sections_from_meta(old_meta_path)
+            self.assertEqual(old_sections["segment_1"].resolve_next_section_id("M4_WHEELCHAIR"), "wheel_branch")
+            self.assertEqual(old_sections["segment_1"].resolve_next_section_id("M0_3"), "default_branch")
+
+            with open(old_history_path, "w", encoding="utf-8") as history_file:
+                json.dump({"sections": legacy_sections_payload, "history": []}, history_file, ensure_ascii=False, indent=2)
+            old_replay_data = _load_json_history(old_history_path)
+            self.assertEqual(old_replay_data.sections["segment_1"].resolve_next_section_id("M4_WHEELCHAIR"), "wheel_branch")
+            self.assertEqual(old_replay_data.sections["segment_1"].resolve_next_section_id("M0_3"), "default_branch")
 
     def test_visual_placements_keep_people_of_same_row_on_same_x_band(self):
         section = Segment("horizontal_1", "horizontal", length=12.0, width=2.0)

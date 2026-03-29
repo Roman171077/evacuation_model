@@ -1464,6 +1464,12 @@ def write_step_replay_meta_json(
     people_count: int,
     output_path: str = "artifacts/replay_meta.json",
 ) -> str:
+    def _routing_payload(section: Segment) -> Dict[str, object]:
+        return {
+            "map": dict(section.next_by_group),
+            "default": section.next_default,
+        }
+
     section_payload = [
         {
             "sid": section.sid,
@@ -1471,9 +1477,7 @@ def write_step_replay_meta_json(
             "length": section.length,
             "width": section.width,
             "exit_width_cj": section.exit_width_cj,
-            "next_section_id": section.next_section_id,
-            "next_by_group": section.next_by_group,
-            "next_default": section.next_default,
+            "routing": _routing_payload(section),
             "merge_lj": section.merge_lj,
             "row_capacity": section.row_capacity,
         }
@@ -1579,6 +1583,12 @@ def build_replay_history_payload(
     sections: Dict[str, Segment],
     history: List[Snapshot],
 ) -> Dict[str, object]:
+    def _routing_payload(section: Segment) -> Dict[str, object]:
+        return {
+            "map": dict(section.next_by_group),
+            "default": section.next_default,
+        }
+
     section_payload = [
         {
             "sid": section.sid,
@@ -1586,9 +1596,7 @@ def build_replay_history_payload(
             "length": section.length,
             "width": section.width,
             "exit_width_cj": section.exit_width_cj,
-            "next_section_id": section.next_section_id,
-            "next_by_group": section.next_by_group,
-            "next_default": section.next_default,
+            "routing": _routing_payload(section),
             "merge_lj": section.merge_lj,
             "row_capacity": section.row_capacity,
         }
