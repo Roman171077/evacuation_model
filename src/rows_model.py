@@ -396,8 +396,35 @@ class Segment:
     width: float
     exit_width_cj: float | None = None
     next_section_id: Optional[str] = None
+    next_by_group: Dict[str, str] = field(default_factory=dict)
+    next_default: Optional[str] = None
     merge_lj: float = 0.0
     row_capacity: Optional[int] = None
+
+    def __post_init__(self) -> None:
+        if self.next_default is None and self.next_section_id is not None:
+            self.next_default = self.next_section_id
+        if self.next_section_id is None:
+            self.next_section_id = self.next_default
+
+    def resolve_next_section_id(self, group: str) -> Optional[str]:
+        if group in self.next_by_group:
+            return self.next_by_group[group]
+        return self.next_default
+
+    def outgoing_section_ids(self) -> List[str]:
+        ordered: List[str] = []
+        seen: set[str] = set()
+
+        for sid in self.next_by_group.values():
+            if sid and sid not in seen:
+                seen.add(sid)
+                ordered.append(sid)
+
+        if self.next_default and self.next_default not in seen:
+            ordered.append(self.next_default)
+
+        return ordered
 
 
 @dataclass
@@ -1137,14 +1164,15 @@ class SinglePersonSingleSegmentModel:
                 return
             section_remaining_capacity[section.sid] = available - 1
 
-            if not section.next_section_id:
+            next_section_id = section.resolve_next_section_id(person.group)
+            if not next_section_id:
                 person.section_id = "EXIT"
                 person.x = 0.0
                 person.finished = True
                 person.exit_time = self.time + dt_to_boundary
                 return
 
-            next_section = self.section_by_id(section.next_section_id)
+            next_section = self.section_by_id(next_section_id)
             current_x = max(0.0, next_section.length - next_section.merge_lj)
             person.section_id = next_section.sid
             person.x = current_x
@@ -1444,6 +1472,8 @@ def write_step_replay_meta_json(
             "width": section.width,
             "exit_width_cj": section.exit_width_cj,
             "next_section_id": section.next_section_id,
+            "next_by_group": section.next_by_group,
+            "next_default": section.next_default,
             "merge_lj": section.merge_lj,
             "row_capacity": section.row_capacity,
         }
@@ -1557,6 +1587,8 @@ def build_replay_history_payload(
             "width": section.width,
             "exit_width_cj": section.exit_width_cj,
             "next_section_id": section.next_section_id,
+            "next_by_group": section.next_by_group,
+            "next_default": section.next_default,
             "merge_lj": section.merge_lj,
             "row_capacity": section.row_capacity,
         }

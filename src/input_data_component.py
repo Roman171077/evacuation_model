@@ -19,13 +19,23 @@ ROWS_DEMO_SECTION_SPECS: tuple[dict[str, object], ...] = (
         'section_type': 'horizontal',
         'length': 25.0,
         'width': 2.0,
-        'next_section_id': 'horizontal_2',
+        'next_by_group': {
+            'M4_WHEELCHAIR': 'ramp_accessible_1',
+        },
+        'next_default': 'horizontal_2',
     },
     {
         'sid': 'horizontal_2',
         'section_type': 'horizontal',
         'length': 25.0,
         'width': 2.0,
+        'next_section_id': None,
+    },
+    {
+        'sid': 'ramp_accessible_1',
+        'section_type': 'ramp_down',
+        'length': 18.0,
+        'width': 1.8,
         'next_section_id': None,
     },
 )
@@ -84,7 +94,10 @@ def print_input_data_summary(sections: Mapping[str, Segment], people: list[Perso
         print(f'Тип участка: {section.section_type}')
         print(f'Длина участка: {section.length:.2f} м')
         print(f'Ширина участка для рядов: {section.width:.2f} м')
-        print(f'Следующий участок: {section.next_section_id or "EXIT"}')
+        if section.next_by_group:
+            for group, next_sid in sorted(section.next_by_group.items()):
+                print(f'Следующий участок для {group}: {next_sid}')
+        print(f'Следующий участок (по умолчанию): {section.next_default or "EXIT"}')
         if section.merge_lj > 0:
             print(f'Координата места слияния: {section.merge_lj:.2f} м')
         print('---')

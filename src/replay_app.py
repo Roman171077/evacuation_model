@@ -78,6 +78,8 @@ def _load_sections_from_meta(meta_path: str) -> Dict[str, Segment]:
             width=float(section_data["width"]),
             exit_width_cj=float(section_data["exit_width_cj"]) if section_data.get("exit_width_cj") is not None else None,
             next_section_id=section_data.get("next_section_id"),
+            next_by_group=dict(section_data.get("next_by_group", {})),
+            next_default=section_data.get("next_default"),
             merge_lj=float(section_data.get("merge_lj", 0.0)),
             row_capacity=section_data.get("row_capacity"),
         )
@@ -97,6 +99,8 @@ def _load_json_history(history_path: str) -> ReplayData:
             width=float(section_data["width"]),
             exit_width_cj=float(section_data["exit_width_cj"]) if section_data.get("exit_width_cj") is not None else None,
             next_section_id=section_data.get("next_section_id"),
+            next_by_group=dict(section_data.get("next_by_group", {})),
+            next_default=section_data.get("next_default"),
             merge_lj=float(section_data.get("merge_lj", 0.0)),
             row_capacity=section_data.get("row_capacity"),
         )
