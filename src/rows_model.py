@@ -518,7 +518,7 @@ class Person:
 
 @dataclass
 class SimulationParams:
-    dt: float = 0.1
+    dt: float = 1.0
     max_time: float = 3600.0
 
 
@@ -1699,7 +1699,7 @@ def build_test_case_simple() -> tuple[dict[str, Segment], list[Person], Simulati
     ]
 
     params = SimulationParams(
-        dt=0.1,
+        dt=1.0,
         max_time=600.0,
     )
 
