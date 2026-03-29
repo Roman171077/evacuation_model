@@ -91,9 +91,10 @@ def build_section_layout_simple(sections: Dict[str, Segment]) -> Dict[str, Secti
         return {}
 
     referenced_sections = {
-        section.next_section_id
+        next_sid
         for section in sections.values()
-        if section.next_section_id in sections
+        for next_sid in section.outgoing_section_ids()
+        if next_sid in sections
     }
     roots = [sid for sid in sections.keys() if sid not in referenced_sections]
     remaining = [sid for sid in sections.keys() if sid not in roots]
@@ -106,7 +107,8 @@ def build_section_layout_simple(sections: Dict[str, Segment]) -> Dict[str, Secti
         while sid not in visited and sid in sections:
             visited.add(sid)
             chain.append(sid)
-            next_sid = sections[sid].next_section_id
+            outgoing = sections[sid].outgoing_section_ids()
+            next_sid = outgoing[0] if outgoing else None
             if next_sid is None or next_sid not in sections:
                 break
             sid = next_sid
@@ -195,7 +197,7 @@ def draw_sections(ax: plt.Axes, sections: Dict[str, Segment], layout: Dict[str, 
             color="#222222",
         )
 
-        if section.next_section_id is None:
+        if not section.outgoing_section_ids():
             ex_x = x1 + 1.2
             ex_y = y1
             ax.plot(
