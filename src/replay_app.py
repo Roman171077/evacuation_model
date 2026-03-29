@@ -76,6 +76,7 @@ def _load_sections_from_meta(meta_path: str) -> Dict[str, Segment]:
             section_type=section_data["section_type"],
             length=float(section_data["length"]),
             width=float(section_data["width"]),
+            exit_width_cj=float(section_data["exit_width_cj"]) if section_data.get("exit_width_cj") is not None else None,
             next_section_id=section_data.get("next_section_id"),
             merge_lj=float(section_data.get("merge_lj", 0.0)),
             row_capacity=section_data.get("row_capacity"),
@@ -94,6 +95,7 @@ def _load_json_history(history_path: str) -> ReplayData:
             section_type=section_data["section_type"],
             length=float(section_data["length"]),
             width=float(section_data["width"]),
+            exit_width_cj=float(section_data["exit_width_cj"]) if section_data.get("exit_width_cj") is not None else None,
             next_section_id=section_data.get("next_section_id"),
             merge_lj=float(section_data.get("merge_lj", 0.0)),
             row_capacity=section_data.get("row_capacity"),
@@ -113,6 +115,14 @@ def _load_json_history(history_path: str) -> ReplayData:
                 section_flow_density={
                     sid: float(value)
                     for sid, value in dict(stats.get("section_flow_density", {})).items()
+                },
+                section_intensity_qj={
+                    sid: float(value)
+                    for sid, value in dict(stats.get("section_intensity_qj", {})).items()
+                },
+                section_capacity_qj={
+                    sid: int(value)
+                    for sid, value in dict(stats.get("section_capacity_qj", {})).items()
                 },
                 finished_count=int(stats.get("finished_count", 0)),
                 total_people=int(stats.get("total_people", len(people))),
@@ -139,6 +149,14 @@ def _load_jsonl_history(steps_path: str, meta_path: str) -> ReplayData:
                     section_flow_density={
                         sid: float(value)
                         for sid, value in dict(stats.get("section_flow_density", {})).items()
+                    },
+                    section_intensity_qj={
+                        sid: float(value)
+                        for sid, value in dict(stats.get("section_intensity_qj", {})).items()
+                    },
+                    section_capacity_qj={
+                        sid: int(value)
+                        for sid, value in dict(stats.get("section_capacity_qj", {})).items()
                     },
                     finished_count=int(stats.get("finished_count", 0)),
                     total_people=int(stats.get("total_people", len(people))),
