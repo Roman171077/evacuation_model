@@ -19,6 +19,7 @@ ROWS_DEMO_SECTION_SPECS: tuple[dict[str, object], ...] = (
         'section_type': 'horizontal',
         'length': 25.0,
         'width': 2.0,
+        'exit_width_cj': 1.2,
         'next_by_group': {
             'M4_WHEELCHAIR': 'ramp_accessible_1',
         },
@@ -29,6 +30,7 @@ ROWS_DEMO_SECTION_SPECS: tuple[dict[str, object], ...] = (
         'section_type': 'horizontal',
         'length': 25.0,
         'width': 2.0,
+        'exit_width_cj': 1.0,
         'next_section_id': None,
     },
     {
@@ -36,6 +38,7 @@ ROWS_DEMO_SECTION_SPECS: tuple[dict[str, object], ...] = (
         'section_type': 'ramp_down',
         'length': 18.0,
         'width': 1.8,
+        'exit_width_cj': 1.8,
         'next_section_id': None,
     },
 )
@@ -94,6 +97,10 @@ def print_input_data_summary(sections: Mapping[str, Segment], people: list[Perso
         print(f'Тип участка: {section.section_type}')
         print(f'Длина участка: {section.length:.2f} м')
         print(f'Ширина участка для рядов: {section.width:.2f} м')
+        if section.exit_width_cj is not None:
+            print(f'Ширина выхода c_j: {section.exit_width_cj:.2f} м')
+        else:
+            print(f'Ширина выхода c_j: {section.width:.2f} м (fallback к ширине участка)')
         if section.next_by_group:
             for group, next_sid in sorted(section.next_by_group.items()):
                 print(f'Следующий участок для {group}: {next_sid}')
