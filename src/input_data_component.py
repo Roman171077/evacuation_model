@@ -31,7 +31,7 @@ ROWS_DEMO_SECTION_SPECS: tuple[dict[str, object], ...] = (
         'length': 25.0,
         'width': 2.0,
         'exit_width_cj': 1.0,
-        'next_section_id': None,
+        'next_default': None,
     },
     {
         'sid': 'ramp_accessible_1',
@@ -39,7 +39,7 @@ ROWS_DEMO_SECTION_SPECS: tuple[dict[str, object], ...] = (
         'length': 18.0,
         'width': 1.8,
         'exit_width_cj': 1.8,
-        'next_section_id': None,
+        'next_default': None,
     },
 )
 
