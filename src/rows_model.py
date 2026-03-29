@@ -1188,13 +1188,6 @@ class SinglePersonSingleSegmentModel:
             dt_to_boundary = current_x / person.v if person.v > 0 else 0.0
             elapsed_time += dt_to_boundary
 
-            available = section_remaining_capacity.get(section.sid, 0)
-            if available <= 0:
-                person.section_id = section.sid
-                person.x = 0.0
-                return
-            section_remaining_capacity[section.sid] = available - 1
-
             next_section_id = section.resolve_next_section_id(person.group)
             if not next_section_id:
                 person.section_id = "EXIT"
@@ -1202,6 +1195,9 @@ class SinglePersonSingleSegmentModel:
                 person.finished = True
                 person.exit_time = self.time + elapsed_time
                 return
+
+            if section.sid in section_remaining_capacity:
+                section_remaining_capacity[section.sid] = max(0, section_remaining_capacity[section.sid] - 1)
 
             next_section = self.section_by_id(next_section_id)
             current_x = next_section.length
