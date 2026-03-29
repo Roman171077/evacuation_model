@@ -198,7 +198,7 @@ class MainRowBuildingTests(unittest.TestCase):
         self.assertAlmostEqual(people[0].x, expected_x, places=6)
 
 
-    def test_person_with_negative_x_raw_transitions_instead_of_sticking_to_zero(self):
+    def test_person_with_negative_x_raw_transitions_to_next_default(self):
         sections = {
             "horizontal_1": Segment(
                 "horizontal_1",
@@ -225,6 +225,35 @@ class MainRowBuildingTests(unittest.TestCase):
         self.assertGreater(people[0].x, 0.0)
         self.assertAlmostEqual(people[0].x, sections["horizontal_2"].length + (0.1 - people[0].v * params.dt), places=6)
 
+    def test_person_with_negative_x_raw_transitions_to_next_by_group(self):
+        sections = {
+            "s1": Segment(
+                "s1",
+                "horizontal",
+                length=10.0,
+                width=2.0,
+                next_default="s_default",
+                next_by_group={"M2_FRAIL_ELDERLY": "s_group"},
+            ),
+            "s_default": Segment("s_default", "horizontal", length=8.0, width=2.0),
+            "s_group": Segment("s_group", "horizontal", length=7.0, width=2.0),
+        }
+        people = [
+            Person(pid=1, group="M0_3", section_id="s1", x=0.1),
+            Person(pid=2, group="M2_FRAIL_ELDERLY", section_id="s1", x=0.1),
+        ]
+        params = SimulationParams(dt=1.0, max_time=10.0)
+        model = SinglePersonSingleSegmentModel(sections, people, params)
+
+        for person in people:
+            person.v = 1.0
+            model._move_person(person, {"s1": 2, "s_default": 2, "s_group": 2})
+
+        self.assertEqual(people[0].section_id, "s_default")
+        self.assertEqual(people[1].section_id, "s_group")
+        self.assertGreater(people[0].x, 0.0)
+        self.assertGreater(people[1].x, 0.0)
+
     def test_person_can_pass_multiple_sections_in_single_step(self):
         sections = {
             "s1": Segment("s1", "horizontal", length=1.0, width=2.0, next_section_id="s2"),
@@ -240,6 +269,21 @@ class MainRowBuildingTests(unittest.TestCase):
 
         self.assertEqual(people[0].section_id, "s3")
         self.assertAlmostEqual(people[0].x, 4.53, places=2)
+
+    def test_no_sticking_at_zero_when_route_exists(self):
+        sections = {
+            "s1": Segment("s1", "horizontal", length=10.0, width=2.0, next_section_id="s2"),
+            "s2": Segment("s2", "horizontal", length=8.0, width=2.0),
+        }
+        people = [Person(pid=1, group="M0_3", section_id="s1", x=0.1)]
+        params = SimulationParams(dt=1.0, max_time=10.0)
+        model = SinglePersonSingleSegmentModel(sections, people, params)
+
+        people[0].v = 1.0
+        model._move_person(people[0], {"s1": 0, "s2": 0})
+
+        self.assertEqual(people[0].section_id, "s2")
+        self.assertGreater(people[0].x, 0.0)
 
     def test_person_exits_without_sticking_at_zero_when_no_next_section(self):
         sections = {"s1": Segment("s1", "horizontal", length=2.0, width=2.0)}
