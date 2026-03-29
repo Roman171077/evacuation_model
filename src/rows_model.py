@@ -394,6 +394,7 @@ class Segment:
     section_type: str
     length: float
     width: float
+    exit_width_cj: float | None = None
     next_section_id: Optional[str] = None
     merge_lj: float = 0.0
     row_capacity: Optional[int] = None
@@ -497,9 +498,11 @@ class Snapshot:
     time: float
     people: List[PersonState]
     section_counts: Dict[str, int]
-    section_flow_density: Dict[str, float]
-    finished_count: int
-    total_people: int
+    section_flow_density: Dict[str, float] = field(default_factory=dict)
+    section_intensity_qj: Dict[str, float] = field(default_factory=dict)
+    section_capacity_qj: Dict[str, int] = field(default_factory=dict)
+    finished_count: int = 0
+    total_people: int = 0
 
 
 
@@ -977,6 +980,102 @@ def compute_section_flow_density(people: List[Person], sections: Dict[str, Segme
     return density_by_section
 
 
+def compute_section_speed_from_density(D_vj_t: float, V0_i: float, ai: float, D0_i: float) -> float:
+    """
+    Возвращает скорость участка `V_j(t)` в м/мин.
+
+    Формула:
+    - `V_j = V0_i`, если `D_vj_t <= D0_i`;
+    - `V_j = V0_i * (1 - ai * ln(D_vj_t / D0_i))`, если `D_vj_t > D0_i`.
+    """
+    density = max(0.0, D_vj_t)
+    if D0_i <= 1e-9 or density <= D0_i:
+        return max(0.0, V0_i)
+    return max(0.0, V0_i * (1.0 - ai * math.log(density / D0_i)))
+
+
+def compute_section_intensity_qj(D_vj_t: float, V_j_t: float) -> float:
+    """
+    Возвращает интенсивность `q_j(t)` в м/мин.
+
+    Формула: `q_j(t) = D_vj_t * V_j(t)`.
+    """
+    return max(0.0, D_vj_t) * max(0.0, V_j_t)
+
+
+def compute_section_capacity_Qj(q_j_t: float, c_j: float, dt: float, f: float) -> int:
+    """
+    Возвращает пропускную способность за шаг `Q_j(t)` (чел/шаг).
+
+    Единицы:
+    - `q_j_t` — м/мин;
+    - `dt` — сек;
+    - деление на `60` обязательно для перевода времени в минуты.
+
+    Формула: `Q_j = (q_j_t * c_j * dt) / (60 * f)`.
+    """
+    if c_j <= 1e-9 or f <= 1e-9 or dt <= 0.0:
+        return 0
+    raw_capacity = (max(0.0, q_j_t) * c_j * dt) / (60.0 * f)
+    if raw_capacity <= 0.0:
+        return 0
+    return max(1, math.floor(raw_capacity))
+
+
+def compute_section_transition_diagnostics(
+    people: List[Person],
+    sections: Dict[str, Segment],
+    dt: float,
+) -> Dict[str, Dict[str, float | int]]:
+    density_by_section = compute_section_flow_density(people, sections)
+    active_people_by_section: Dict[str, List[Person]] = {sid: [] for sid in sections.keys()}
+    for person in people:
+        if person.finished:
+            continue
+        if person.section_id in active_people_by_section:
+            active_people_by_section[person.section_id].append(person)
+
+    diagnostics: Dict[str, Dict[str, float | int]] = {}
+    for sid, section in sections.items():
+        section_people = active_people_by_section.get(sid, [])
+        density = density_by_section.get(sid, 0.0)
+        if section_people:
+            v0_values: List[float] = []
+            ai_values: List[float] = []
+            d0_values: List[float] = []
+            f_values: List[float] = []
+            for person in section_people:
+                speed_section_type = resolve_section_type_for_profile(person.group, section.section_type)
+                movement_params = get_profile_movement_params(person.group, speed_section_type)
+                v0_values.append(float(movement_params["V0"]))
+                ai_values.append(float(movement_params["ai"]))
+                d0_values.append(float(movement_params["D0"]))
+                f_values.append(person.f)
+            v0 = sum(v0_values) / len(v0_values)
+            ai = sum(ai_values) / len(ai_values)
+            d0 = sum(d0_values) / len(d0_values)
+            f = sum(f_values) / len(f_values)
+        else:
+            v0 = 0.0
+            ai = 0.0
+            d0 = 0.0
+            f = 0.0
+
+        v_j = compute_section_speed_from_density(density, v0, ai, d0)
+        q_j = compute_section_intensity_qj(density, v_j)
+        c_j = section.exit_width_cj if section.exit_width_cj is not None else section.width
+        Q_j = compute_section_capacity_Qj(q_j, c_j, dt, f)
+        diagnostics[sid] = {
+            "D_vj": density,
+            "V_j_mpm": v_j,
+            "q_j_mpm": q_j,
+            "Q_j": Q_j,
+            "c_j": c_j,
+            "f_mean": f,
+        }
+    return diagnostics
+
+
 def apply_row_geometry_on_sections(people: List[Person], sections: Dict[str, Segment]) -> None:
     update_rows_and_flows_on_sections(people, sections)
 
@@ -992,6 +1091,10 @@ class SinglePersonSingleSegmentModel:
         self.people = people
         self.params = params
         self.time = 0.0
+        self.last_section_diagnostics: Dict[str, Dict[str, float | int]] = {
+            sid: {"D_vj": 0.0, "V_j_mpm": 0.0, "q_j_mpm": 0.0, "Q_j": 0, "c_j": section.width, "f_mean": 0.0}
+            for sid, section in sections.items()
+        }
 
     def section(self) -> Segment:
         return next(iter(self.sections.values()))
@@ -1005,7 +1108,7 @@ class SinglePersonSingleSegmentModel:
     def all_finished(self) -> bool:
         return all(person.finished for person in self.people)
 
-    def _move_person(self, person: Person) -> None:
+    def _move_person(self, person: Person, section_remaining_capacity: Dict[str, int]) -> None:
         current_section = self.section_by_id(person.section_id)
         person.x_raw = person.x - person.v * self.params.dt
 
@@ -1026,6 +1129,13 @@ class SinglePersonSingleSegmentModel:
             distance_to_boundary = current_x
             remaining_distance -= distance_to_boundary
             dt_to_boundary = distance_to_boundary / person.v
+
+            available = section_remaining_capacity.get(section.sid, 0)
+            if available <= 0:
+                person.section_id = section.sid
+                person.x = 0.0
+                return
+            section_remaining_capacity[section.sid] = available - 1
 
             if not section.next_section_id:
                 person.section_id = "EXIT"
@@ -1056,6 +1166,11 @@ class SinglePersonSingleSegmentModel:
 
         section_state = update_rows_and_flows_on_sections(self.people, self.sections)
         update_person_local_density_on_sections(self.people, self.sections, section_state)
+        self.last_section_diagnostics = compute_section_transition_diagnostics(
+            self.people,
+            self.sections,
+            self.params.dt,
+        )
 
         for person in self.people:
             if person.finished:
@@ -1079,10 +1194,16 @@ class SinglePersonSingleSegmentModel:
                 )
             person.x = original_x_by_pid.get(person.pid, person.x)
 
-        for person in self.people:
+        section_remaining_capacity = {
+            sid: int(metrics["Q_j"])
+            for sid, metrics in self.last_section_diagnostics.items()
+        }
+        movable_people = [person for person in self.people if not person.finished]
+        movable_people.sort(key=lambda current: current.x)
+        for person in movable_people:
             if person.finished:
                 continue
-            self._move_person(person)
+            self._move_person(person, section_remaining_capacity)
 
     def build_result(self) -> Dict[str, float | int | Dict[int, float | None]]:
         total_path_length = sum(section.length for section in self.sections.values())
@@ -1203,13 +1324,18 @@ def build_snapshot(model: SinglePersonSingleSegmentModel, snapshot_time: Optiona
         if not person.finished and person.section_id in section_counts:
             section_counts[person.section_id] += 1
 
-    section_flow_density = compute_section_flow_density(model.people, model.sections)
+    diagnostics = compute_section_transition_diagnostics(model.people, model.sections, model.params.dt)
+    section_flow_density = {sid: float(values["D_vj"]) for sid, values in diagnostics.items()}
+    section_intensity_qj = {sid: float(values["q_j_mpm"]) for sid, values in diagnostics.items()}
+    section_capacity_qj = {sid: int(values["Q_j"]) for sid, values in diagnostics.items()}
 
     return Snapshot(
         time=round(model.time if snapshot_time is None else snapshot_time, 3),
         people=people_state,
         section_counts=section_counts,
         section_flow_density=section_flow_density,
+        section_intensity_qj=section_intensity_qj,
+        section_capacity_qj=section_capacity_qj,
         finished_count=sum(1 for person in model.people if person.finished),
         total_people=len(model.people),
     )
@@ -1220,7 +1346,10 @@ def build_step_payload(model: SinglePersonSingleSegmentModel, step: int) -> Dict
     for person in model.people:
         if not person.finished and person.section_id in section_counts:
             section_counts[person.section_id] += 1
-    section_flow_density = compute_section_flow_density(model.people, model.sections)
+    diagnostics = compute_section_transition_diagnostics(model.people, model.sections, model.params.dt)
+    section_flow_density = {sid: float(values["D_vj"]) for sid, values in diagnostics.items()}
+    section_intensity_qj = {sid: float(values["q_j_mpm"]) for sid, values in diagnostics.items()}
+    section_capacity_qj = {sid: int(values["Q_j"]) for sid, values in diagnostics.items()}
 
     people_payload = []
     for person in sorted(model.people, key=lambda current: current.pid):
@@ -1291,6 +1420,11 @@ def build_step_payload(model: SinglePersonSingleSegmentModel, step: int) -> Dict
             "remaining_count": total_people - finished_count,
             "section_counts": section_counts,
             "section_flow_density": section_flow_density,
+            "section_intensity_qj": section_intensity_qj,
+            "section_capacity_qj": section_capacity_qj,
+            "section_D_vj": section_flow_density,
+            "section_q_j": section_intensity_qj,
+            "section_Q_j": section_capacity_qj,
         },
     }
 
@@ -1308,6 +1442,7 @@ def write_step_replay_meta_json(
             "section_type": section.section_type,
             "length": section.length,
             "width": section.width,
+            "exit_width_cj": section.exit_width_cj,
             "next_section_id": section.next_section_id,
             "merge_lj": section.merge_lj,
             "row_capacity": section.row_capacity,
@@ -1420,6 +1555,7 @@ def build_replay_history_payload(
             "section_type": section.section_type,
             "length": section.length,
             "width": section.width,
+            "exit_width_cj": section.exit_width_cj,
             "next_section_id": section.next_section_id,
             "merge_lj": section.merge_lj,
             "row_capacity": section.row_capacity,
@@ -1441,6 +1577,11 @@ def build_replay_history_payload(
                     "remaining_count": snapshot.total_people - snapshot.finished_count,
                     "section_counts": snapshot.section_counts,
                     "section_flow_density": snapshot.section_flow_density,
+                    "section_intensity_qj": snapshot.section_intensity_qj,
+                    "section_capacity_qj": snapshot.section_capacity_qj,
+                    "section_D_vj": snapshot.section_flow_density,
+                    "section_q_j": snapshot.section_intensity_qj,
+                    "section_Q_j": snapshot.section_capacity_qj,
                 },
             }
         )
