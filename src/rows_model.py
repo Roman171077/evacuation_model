@@ -246,6 +246,8 @@ FLOW_PROFILES: Dict[str, Dict[str, object]] = {
             "horizontal": {"V0": 60.0, "ai": 0.400, "D0": 0.141},
             "ramp_down":  {"V0": 60.0, "ai": 0.400, "D0": 0.141},
             "ramp_up":    {"V0": 40.0, "ai": 0.420, "D0": 0.156},
+            "stairs_down": {"V0": 0.0, "ai": 0.400, "D0": 0.141},
+            "stairs_up":   {"V0": 0.0, "ai": 0.400, "D0": 0.141},
         },
     },
 
