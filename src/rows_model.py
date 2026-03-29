@@ -428,7 +428,6 @@ class Segment:
     next_section_id: Optional[str] = None
     next_by_group: Dict[str, str] = field(default_factory=dict)
     next_default: Optional[str] = None
-    merge_lj: float = 0.0
     row_capacity: Optional[int] = None
 
     def __post_init__(self) -> None:
@@ -1173,19 +1172,21 @@ class SinglePersonSingleSegmentModel:
             person.x = max(0.0, person.x_raw)
             return
 
-        remaining_distance = person.v * self.params.dt
-        current_x = person.x
         section = current_section
+        current_x = person.x
+        remaining_distance = person.v * self.params.dt
+        elapsed_time = 0.0
 
         while True:
-            if remaining_distance < current_x:
+            x_raw = current_x - remaining_distance
+            if x_raw >= 0:
                 person.section_id = section.sid
-                person.x = current_x - remaining_distance
+                person.x = x_raw
                 return
 
-            distance_to_boundary = current_x
-            remaining_distance -= distance_to_boundary
-            dt_to_boundary = distance_to_boundary / person.v
+            overshoot = -x_raw
+            dt_to_boundary = current_x / person.v if person.v > 0 else 0.0
+            elapsed_time += dt_to_boundary
 
             available = section_remaining_capacity.get(section.sid, 0)
             if available <= 0:
@@ -1199,13 +1200,14 @@ class SinglePersonSingleSegmentModel:
                 person.section_id = "EXIT"
                 person.x = 0.0
                 person.finished = True
-                person.exit_time = self.time + dt_to_boundary
+                person.exit_time = self.time + elapsed_time
                 return
 
             next_section = self.section_by_id(next_section_id)
-            current_x = max(0.0, next_section.length - next_section.merge_lj)
+            current_x = next_section.length
+            remaining_distance = overshoot
             person.section_id = next_section.sid
-            person.x = current_x
+            person.x = next_section.length + x_raw
             section = next_section
 
     def step(self) -> None:
@@ -1508,7 +1510,6 @@ def write_step_replay_meta_json(
             "width": section.width,
             "exit_width_cj": section.exit_width_cj,
             "routing": _routing_payload(section),
-            "merge_lj": section.merge_lj,
             "row_capacity": section.row_capacity,
         }
         for section in sections.values()
@@ -1627,7 +1628,6 @@ def build_replay_history_payload(
             "width": section.width,
             "exit_width_cj": section.exit_width_cj,
             "routing": _routing_payload(section),
-            "merge_lj": section.merge_lj,
             "row_capacity": section.row_capacity,
         }
         for section in sections.values()

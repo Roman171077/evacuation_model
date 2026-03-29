@@ -182,7 +182,6 @@ class MainRowBuildingTests(unittest.TestCase):
                 "horizontal",
                 length=8.0,
                 width=2.0,
-                merge_lj=1.5,
             ),
         }
         people = [Person(pid=1, group="M0_3", section_id="horizontal_1", x=0.2)]
@@ -193,7 +192,36 @@ class MainRowBuildingTests(unittest.TestCase):
 
         self.assertFalse(people[0].finished)
         self.assertEqual(people[0].section_id, "horizontal_2")
-        self.assertAlmostEqual(people[0].x, 5.03, places=2)
+        self.assertAlmostEqual(people[0].x, 6.53, places=2)
+
+    def test_person_can_pass_multiple_sections_in_single_step(self):
+        sections = {
+            "s1": Segment("s1", "horizontal", length=1.0, width=2.0, next_section_id="s2"),
+            "s2": Segment("s2", "horizontal", length=1.0, width=2.0, next_section_id="s3"),
+            "s3": Segment("s3", "horizontal", length=5.0, width=2.0),
+        }
+        people = [Person(pid=1, group="M0_3", section_id="s1", x=0.2)]
+        params = SimulationParams(dt=1.0, max_time=10.0)
+        model = SinglePersonSingleSegmentModel(sections, people, params)
+
+        people[0].v = 1.6666666667
+        model._move_person(people[0], {"s1": 1, "s2": 1, "s3": 1})
+
+        self.assertEqual(people[0].section_id, "s3")
+        self.assertAlmostEqual(people[0].x, 4.53, places=2)
+
+    def test_person_exits_without_sticking_at_zero_when_no_next_section(self):
+        sections = {"s1": Segment("s1", "horizontal", length=2.0, width=2.0)}
+        people = [Person(pid=1, group="M0_3", section_id="s1", x=0.1)]
+        params = SimulationParams(dt=1.0, max_time=10.0)
+        model = SinglePersonSingleSegmentModel(sections, people, params)
+
+        model.step()
+
+        self.assertTrue(people[0].finished)
+        self.assertEqual(people[0].section_id, "EXIT")
+        self.assertAlmostEqual(people[0].x, 0.0, places=6)
+        self.assertIsNotNone(people[0].exit_time)
 
     def test_position_state_for_single_person_on_section(self):
         section = Segment("horizontal_1", "horizontal", length=12.0, width=2.0)
