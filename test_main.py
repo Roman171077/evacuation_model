@@ -8,7 +8,7 @@ from unittest.mock import patch
 from src.visualization import build_flow_summary_lines
 from src.replay_app import _build_flow_membership_rows, _load_json_history, _load_sections_from_meta
 from src.rows_model import build_replay_history_payload
-from src.input_data_component import ROWS_DEMO_SECTION_SPECS
+from src.input_data_component import ROWS_SECTION_SPECS
 from main import (
     Person,
     PersonState,
@@ -671,7 +671,7 @@ class MainRowBuildingTests(unittest.TestCase):
         self.assertEqual(first.resolve_next_section_id("M4_WHEELCHAIR"), "ramp_accessible_1")
         self.assertEqual(first.resolve_next_section_id("M0_3"), "horizontal_2")
 
-        for section_spec in ROWS_DEMO_SECTION_SPECS:
+        for section_spec in ROWS_SECTION_SPECS:
             self.assertNotIn("merge_lj", section_spec)
 
     def test_run_simulation_with_history_supports_demo_multi_segment_case(self):
