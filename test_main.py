@@ -8,6 +8,7 @@ from unittest.mock import patch
 from src.visualization import build_flow_summary_lines
 from src.replay_app import _build_flow_membership_rows, _load_json_history, _load_sections_from_meta
 from src.rows_model import build_replay_history_payload
+from src.input_data_component import ROWS_DEMO_SECTION_SPECS
 from main import (
     Person,
     PersonState,
@@ -192,7 +193,37 @@ class MainRowBuildingTests(unittest.TestCase):
 
         self.assertFalse(people[0].finished)
         self.assertEqual(people[0].section_id, "horizontal_2")
-        self.assertAlmostEqual(people[0].x, 6.53, places=2)
+        x_prev = 0.2
+        expected_x = sections["horizontal_2"].length + (x_prev - people[0].v * params.dt)
+        self.assertAlmostEqual(people[0].x, expected_x, places=6)
+
+
+    def test_person_with_negative_x_raw_transitions_instead_of_sticking_to_zero(self):
+        sections = {
+            "horizontal_1": Segment(
+                "horizontal_1",
+                "horizontal",
+                length=10.0,
+                width=2.0,
+                next_section_id="horizontal_2",
+            ),
+            "horizontal_2": Segment(
+                "horizontal_2",
+                "horizontal",
+                length=8.0,
+                width=2.0,
+            ),
+        }
+        people = [Person(pid=1, group="M0_3", section_id="horizontal_1", x=0.1)]
+        params = SimulationParams(dt=1.0, max_time=10.0)
+        model = SinglePersonSingleSegmentModel(sections, people, params)
+
+        people[0].v = 1.0
+        model._move_person(people[0], {"horizontal_1": 1, "horizontal_2": 1})
+
+        self.assertEqual(people[0].section_id, "horizontal_2")
+        self.assertGreater(people[0].x, 0.0)
+        self.assertAlmostEqual(people[0].x, sections["horizontal_2"].length + (0.1 - people[0].v * params.dt), places=6)
 
     def test_person_can_pass_multiple_sections_in_single_step(self):
         sections = {
@@ -585,6 +616,19 @@ class MainRowBuildingTests(unittest.TestCase):
 
     def test_demo_input_data_builder_is_exported_from_input_component(self):
         self.assertEqual(build_rows_demo_case.__module__, "src.input_data_component")
+
+
+    def test_rows_demo_sections_use_routing_maps_without_merge_parameters(self):
+        sections, _, _ = build_rows_demo_case()
+
+        first = sections["horizontal_1"]
+        self.assertEqual(first.next_by_group, {"M4_WHEELCHAIR": "ramp_accessible_1"})
+        self.assertEqual(first.next_default, "horizontal_2")
+        self.assertEqual(first.resolve_next_section_id("M4_WHEELCHAIR"), "ramp_accessible_1")
+        self.assertEqual(first.resolve_next_section_id("M0_3"), "horizontal_2")
+
+        for section_spec in ROWS_DEMO_SECTION_SPECS:
+            self.assertNotIn("merge_lj", section_spec)
 
     def test_run_simulation_with_history_supports_demo_multi_segment_case(self):
         scenario = build_rows_demo_case()
