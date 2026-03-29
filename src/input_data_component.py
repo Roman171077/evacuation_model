@@ -105,8 +105,6 @@ def print_input_data_summary(sections: Mapping[str, Segment], people: list[Perso
             for group, next_sid in sorted(section.next_by_group.items()):
                 print(f'Следующий участок для {group}: {next_sid}')
         print(f'Следующий участок (по умолчанию): {section.next_default or "EXIT"}')
-        if section.merge_lj > 0:
-            print(f'Координата места слияния: {section.merge_lj:.2f} м')
         print('---')
 
     print('Характеристика людей:')
