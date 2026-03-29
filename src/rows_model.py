@@ -29,6 +29,8 @@ FLOW_PROFILES: Dict[str, Dict[str, object]] = {
             "door":        {"V0": 92.6,  "ai": 0.350, "D0": 1.20},
             "stairs_down": {"V0": 92.4,  "ai": 0.338, "D0": 0.94},
             "stairs_up":   {"V0": 65.9,  "ai": 0.289, "D0": 0.84},
+            "ramp_down": {"V0": 92.6,  "ai": 0.284, "D0": 0.75},
+            "ramp_up":   {"V0": 92.6,  "ai": 0.284, "D0": 0.75},
         },
     },
     "M0_2": {
@@ -43,6 +45,8 @@ FLOW_PROFILES: Dict[str, Dict[str, object]] = {
             "door":        {"V0": 120.0, "ai": 0.308, "D0": 0.53},
             "stairs_down": {"V0": 129.0, "ai": 0.353, "D0": 0.58},
             "stairs_up":   {"V0": 76.8,  "ai": 0.305, "D0": 0.67},
+            "ramp_down": {"V0": 120.0, "ai": 0.308, "D0": 0.72},
+            "ramp_up":   {"V0": 120.0, "ai": 0.308, "D0": 0.72},
         },
     },
     "M0_3": {
@@ -57,6 +61,8 @@ FLOW_PROFILES: Dict[str, Dict[str, object]] = {
             "door":        {"V0": 100.0, "ai": 0.295, "D0": 0.65},
             "stairs_down": {"V0": 100.0, "ai": 0.400, "D0": 0.89},
             "stairs_up":   {"V0": 60.0,  "ai": 0.305, "D0": 0.67},
+            "ramp_down": {"V0": 100.0, "ai": 0.295, "D0": 0.51},
+            "ramp_up":   {"V0": 100.0, "ai": 0.295, "D0": 0.51},
         },
     },
     "M0_4": {
@@ -71,6 +77,8 @@ FLOW_PROFILES: Dict[str, Dict[str, object]] = {
             "door":        {"V0": 93.8,  "ai": 0.371, "D0": 0.64},
             "stairs_down": {"V0": 93.8,  "ai": 0.394, "D0": 0.75},
             "stairs_up":   {"V0": 57.5,  "ai": 0.375, "D0": 0.66},
+            "ramp_down": {"V0": 93.8,  "ai": 0.353, "D0": 0.56},
+            "ramp_up":   {"V0": 93.8,  "ai": 0.353, "D0": 0.56},
         },
     },
     "M0_5": {
@@ -85,6 +93,8 @@ FLOW_PROFILES: Dict[str, Dict[str, object]] = {
             "door":        {"V0": 91.8,  "ai": 0.366, "D0": 0.62},
             "stairs_down": {"V0": 90.0,  "ai": 0.410, "D0": 0.83},
             "stairs_up":   {"V0": 56.1,  "ai": 0.379, "D0": 0.68},
+            "ramp_down": {"V0": 91.4,  "ai": 0.357, "D0": 0.58},
+            "ramp_up":   {"V0": 91.4,  "ai": 0.357, "D0": 0.58},
         },
     },
     "M0_6": {
@@ -99,6 +109,8 @@ FLOW_PROFILES: Dict[str, Dict[str, object]] = {
             "door":        {"V0": 72.1,  "ai": 0.318, "D0": 0.41},
             "stairs_down": {"V0": 61.7,  "ai": 0.394, "D0": 0.75},
             "stairs_up":   {"V0": 43.5,  "ai": 0.400, "D0": 0.78},
+            "ramp_down": {"V0": 69.6,  "ai": 0.385, "D0": 0.71},
+            "ramp_up":   {"V0": 69.6,  "ai": 0.385, "D0": 0.71},
         },
     },
     "M0_7": {
@@ -113,6 +125,8 @@ FLOW_PROFILES: Dict[str, Dict[str, object]] = {
             "door":        {"V0": 50.0,  "ai": 0.253, "D0": 0.18},
             "stairs_down": {"V0": 30.0,  "ai": 0.367, "D0": 0.62},
             "stairs_up":   {"V0": 30.0,  "ai": 0.414, "D0": 0.88},
+            "ramp_down": {"V0": 45.02, "ai": 0.425, "D0": 0.86},
+            "ramp_up":   {"V0": 45.02, "ai": 0.425, "D0": 0.86},
         },
     },
 
@@ -132,6 +146,8 @@ FLOW_PROFILES: Dict[str, Dict[str, object]] = {
             "door":        {"V0": 80.0,  "ai": 0.295, "D0": 0.65},
             "stairs_down": {"V0": 70.0,  "ai": 0.400, "D0": 0.89},
             "stairs_up":   {"V0": 60.0,  "ai": 0.305, "D0": 0.67},
+            "ramp_down": {"V0": 80.0,  "ai": 0.295, "D0": 0.51},
+            "ramp_up":   {"V0": 80.0,  "ai": 0.295, "D0": 0.51},
         },
     },
     "M1_PRESCHOOL": {
@@ -147,6 +163,8 @@ FLOW_PROFILES: Dict[str, Dict[str, object]] = {
             "door":        {"V0": 60.0,  "ai": 0.350, "D0": 1.20},
             "stairs_down": {"V0": 47.0,  "ai": 0.190, "D0": 0.64},
             "stairs_up":   {"V0": 47.0,  "ai": 0.275, "D0": 0.76},
+            "ramp_down": {"V0": 60.0,  "ai": 0.275, "D0": 0.78},
+            "ramp_up":   {"V0": 60.0,  "ai": 0.275, "D0": 0.78},
         },
     },
     "M1_DEAF": {
@@ -162,6 +180,8 @@ FLOW_PROFILES: Dict[str, Dict[str, object]] = {
             "door":        {"V0": 82.0,  "ai": 0.328, "D0": 0.73},
             "stairs_down": {"V0": 82.0,  "ai": 0.380, "D0": 0.91},
             "stairs_up":   {"V0": 54.0,  "ai": 0.344, "D0": 0.72},
+            "ramp_down": {"V0": 82.0,  "ai": 0.301, "D0": 0.58},
+            "ramp_up":   {"V0": 82.0,  "ai": 0.301, "D0": 0.58},
         },
     },
     "M1_PREGNANT": {
@@ -177,6 +197,8 @@ FLOW_PROFILES: Dict[str, Dict[str, object]] = {
             "door":        {"V0": 49.47, "ai": 0.427, "D0": 1.033},
             "stairs_down": {"V0": 42.35, "ai": 0.336, "D0": 0.786},
             "stairs_up":   {"V0": 31.25, "ai": 0.411, "D0": 1.312},
+            "ramp_down": {"V0": 56.42, "ai": 0.404, "D0": 0.991},
+            "ramp_up":   {"V0": 56.42, "ai": 0.404, "D0": 0.991},
         },
     },
 
@@ -211,6 +233,8 @@ FLOW_PROFILES: Dict[str, Dict[str, object]] = {
             "door":        {"V0": 17.0, "ai": 0.271, "D0": 0.77},
             "stairs_down": {"V0": 21.0, "ai": 0.519, "D0": 0.97},
             "stairs_up":   {"V0": 18.0, "ai": 0.387, "D0": 0.82},
+            "ramp_down": {"V0": 26.0, "ai": 0.371, "D0": 0.73},
+            "ramp_up":   {"V0": 26.0, "ai": 0.371, "D0": 0.73},
         },
     },
 
@@ -229,6 +253,8 @@ FLOW_PROFILES: Dict[str, Dict[str, object]] = {
             "door":        {"V0": 38.0, "ai": 0.345, "D0": 0.57},
             "stairs_down": {"V0": 24.0, "ai": 0.422, "D0": 0.96},
             "stairs_up":   {"V0": 14.0, "ai": 0.313, "D0": 0.74},
+            "ramp_down": {"V0": 44.0, "ai": 0.414, "D0": 0.77},
+            "ramp_up":   {"V0": 44.0, "ai": 0.414, "D0": 0.77},
         },
     },
 
@@ -266,6 +292,8 @@ FLOW_PROFILES: Dict[str, Dict[str, object]] = {
             "door":        {"V0": 47.0, "ai": 0.300, "D0": 0.67},
             "stairs_down": {"V0": 23.0, "ai": 0.210, "D0": 0.63},
             "stairs_up":   {"V0": 20.0, "ai": 0.300, "D0": 0.69},
+            "ramp_down": {"V0": 51.0, "ai": 0.290, "D0": 0.60},
+            "ramp_up":   {"V0": 51.0, "ai": 0.290, "D0": 0.60},
         },
     },
 
