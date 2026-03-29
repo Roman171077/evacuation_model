@@ -60,7 +60,7 @@ ROWS_DEMO_PERSON_SPECS: tuple[dict[str, object], ...] = (
 )
 
 
-ROWS_DEMO_PARAMS = SimulationParams(dt=0.1, max_time=120.0)
+ROWS_DEMO_PARAMS = SimulationParams(dt=1.0, max_time=120.0)
 
 
 def build_rows_demo_case() -> tuple[dict[str, Segment], list[Person], SimulationParams]:

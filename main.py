@@ -128,7 +128,7 @@ def parse_cli_args() -> argparse.Namespace:
     parser.add_argument(
         '--snapshot-interval',
         type=float,
-        default=0.1,
+        default=1.0,
         help='Шаг между кадрами истории, с.',
     )
     return parser.parse_args()
